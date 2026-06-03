@@ -1,0 +1,22 @@
+MIME-Version: 1.0
+From: vendor@acme.com
+To: accounting@beta.com
+Subject: Invoice INV-2024-002 from Acme Corp
+Content-Type: text/plain; charset=utf-8
+
+Dear Beta Inc,
+
+Please find below invoice details:
+
+Invoice Number: INV-2024-002
+Invoice Date: 2024-02-01
+Due Date: 2024-03-01
+Vendor: Acme Corp
+Buyer: Beta Inc
+Total Amount: $2200.00 USD
+Tax: $200.00
+Subtotal: $2000.00
+Payment Terms: Net 30
+
+Thank you for your business.
+Acme Corp

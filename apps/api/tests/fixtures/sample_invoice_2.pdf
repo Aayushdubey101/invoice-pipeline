@@ -1,0 +1,36 @@
+%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj
+4 0 obj<</Length 406>>
+stream
+BT
+/F1 12 Tf
+50 750 Td (INVOICE) Tj
+0 -20 Td (Invoice Number: INV-2024-001) Tj
+0 -20 Td (Invoice Date: 2024-01-15) Tj
+0 -20 Td (Due Date: 2024-02-15) Tj
+0 -20 Td (Vendor: Acme Corp) Tj
+0 -20 Td (Buyer: Beta Inc) Tj
+0 -20 Td (Description: Consulting Services) Tj
+0 -20 Td (Quantity: 10  Unit Price: $100.00  Total: $1000.00) Tj
+0 -20 Td (Subtotal: $1000.00) Tj
+0 -20 Td (Tax: $100.00) Tj
+0 -20 Td (Total Amount: $1100.00 USD) Tj
+0 -20 Td (Payment Terms: Net 30) Tj
+ET
+endstream
+endobj
+5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
+xref
+0 6
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+0000000266 00000 n
+0000000724 00000 n
+trailer<</Size 6/Root 1 0 R>>
+startxref
+805
+%%EOF
