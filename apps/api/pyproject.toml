@@ -1,0 +1,113 @@
+[project]
+name = "invoice-pipeline"
+version = "0.1.0"
+description = "Invoice Intelligence Pipeline — structured extraction from unstructured invoices"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Aayush Dubey", email = "aayushdubey101@users.noreply.github.com" },
+]
+dependencies = [
+    # Web framework
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    # Validation & config
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    # Database
+    "sqlalchemy[asyncio]>=2.0.36",
+    "alembic>=1.14.0",
+    "asyncpg>=0.30.0",
+    "aiosqlite>=0.20.0",
+    # LLM (lightweight clients only — no heavy ML)
+    "instructor>=1.7.0",
+    "openai>=1.58.0",
+    "anthropic>=0.40.0",
+    "google-genai>=1.0.0",
+    # Canonicalization helpers
+    "dateparser>=1.2.0",
+    "babel>=2.16.0",
+    "rapidfuzz>=3.10.0",
+    "python-stdnum>=1.20",
+    # Logging
+    "structlog>=24.4.0",
+    # Rate limiting
+    "slowapi>=0.1.9",
+    # Observability
+    "prometheus-client>=0.21.0",
+    # HTTP client
+    "httpx>=0.28.0",
+    # Utilities
+    "python-multipart>=0.0.20",
+    "aiofiles>=24.1.0",
+]
+
+[project.optional-dependencies]
+# Phase 3+: PDF and document parsing
+docs = [
+    "pdfplumber>=0.11.0",
+    "pymupdf>=1.25.0",
+]
+# Phase 4+: OCR and email parsing
+ocr = [
+    "pdfplumber>=0.11.0",
+    "pymupdf>=1.25.0",
+    "pytesseract>=0.3.13",
+    "unstructured[email]>=0.16.0",
+]
+# Phase 4+: PaddleOCR (heavy GPU/CPU dep)
+paddle = [
+    "paddlepaddle>=2.6.0",
+    "paddleocr>=2.9.0",
+]
+# Phase 5+: Vector embeddings (CPU-only torch — no NVIDIA packages)
+ml = [
+    "torch>=2.0.0",
+    "sentence-transformers>=3.3.0",
+    "chromadb>=0.6.0",
+]
+# Full install: everything
+full = [
+    "invoice-pipeline[docs,ocr,ml]",
+]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.28.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "reportlab>=4.2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# CPU-only torch — avoids 2GB+ of NVIDIA CUDA packages in Docker
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/invoice_pipeline"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
