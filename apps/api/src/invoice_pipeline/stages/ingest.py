@@ -2,7 +2,7 @@ import hashlib
 
 import structlog
 
-from invoice_pipeline.schemas import Document, DocumentStatus, PipelineError
+from invoice_pipeline.schemas import Document, DocumentStatus
 
 log = structlog.get_logger()
 

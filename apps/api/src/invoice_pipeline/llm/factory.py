@@ -83,48 +83,48 @@ async def create_provider() -> LLMProvider:
 def _build(name: LLMProviderName) -> LLMProvider:
     if name == LLMProviderName.LM_STUDIO:
         from invoice_pipeline.llm.lm_studio import LMStudioProvider
-        provider = LMStudioProvider()
+
         log.info(
             "startup",
             message=f"LLM provider: lm_studio (model={settings.LM_STUDIO_MODEL}, endpoint={settings.LM_STUDIO_BASE_URL})",
         )
-        return provider  # type: ignore[return-value]
+        return LMStudioProvider()
 
     if name == LLMProviderName.OPENAI:
         from invoice_pipeline.llm.openai_client import OpenAIProvider
-        provider = OpenAIProvider()
+
         log.info("startup", message=f"LLM provider: openai (model={settings.OPENAI_MODEL})")
-        return provider  # type: ignore[return-value]
+        return OpenAIProvider()
 
     if name == LLMProviderName.ANTHROPIC:
         from invoice_pipeline.llm.anthropic_client import AnthropicProvider
-        provider = AnthropicProvider()
+
         log.info("startup", message=f"LLM provider: anthropic (model={settings.ANTHROPIC_MODEL})")
-        return provider  # type: ignore[return-value]
+        return AnthropicProvider()
 
     if name == LLMProviderName.GEMINI:
         from invoice_pipeline.llm.gemini_client import GeminiProvider
-        provider = GeminiProvider()
+
         log.info("startup", message=f"LLM provider: gemini (model={settings.GEMINI_MODEL})")
-        return provider  # type: ignore[return-value]
+        return GeminiProvider()
 
     if name == LLMProviderName.LLAMACPP:
         from invoice_pipeline.llm.llamacpp_client import LlamaCppProvider
-        provider = LlamaCppProvider()
+
         log.info(
             "startup",
             message=f"LLM provider: llamacpp (model={settings.LLAMACPP_MODEL}, endpoint={settings.LLAMACPP_BASE_URL})",
         )
-        return provider  # type: ignore[return-value]
+        return LlamaCppProvider()
 
     if name == LLMProviderName.OLLAMA:
         from invoice_pipeline.llm.ollama_client import OllamaProvider
-        provider = OllamaProvider()
+
         log.info(
             "startup",
             message=f"LLM provider: ollama (model={settings.OLLAMA_MODEL}, endpoint={settings.OLLAMA_BASE_URL})",
         )
-        return provider  # type: ignore[return-value]
+        return OllamaProvider()
 
     raise NoLLMProviderConfigured()
 

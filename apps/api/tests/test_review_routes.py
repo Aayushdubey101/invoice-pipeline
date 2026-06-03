@@ -13,8 +13,8 @@ from invoice_pipeline.api.main import app
 from invoice_pipeline.db.models import AuditLog, Base, Document, Invoice, InvoiceField, Vendor
 from invoice_pipeline.db.session import get_session
 
-
 # ── DB fixture ────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 async def db_engine():
@@ -44,6 +44,7 @@ async def client(db_session: AsyncSession):
 
 
 # ── Seed helpers ──────────────────────────────────────────────────────────────
+
 
 async def seed_vendor(session: AsyncSession, **kwargs) -> Vendor:
     v = Vendor(
@@ -110,6 +111,7 @@ async def seed_field(session: AsyncSession, invoice_id: str, **kwargs) -> Invoic
 
 # ── Review queue ──────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_review_queue_empty(client: AsyncClient) -> None:
     res = await client.get("/review/queue")
@@ -148,6 +150,7 @@ async def test_review_queue_excludes_non_review_invoices(
 
 
 # ── Approve ───────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_approve_invoice(client: AsyncClient, db_session: AsyncSession) -> None:
@@ -189,6 +192,7 @@ async def test_approve_writes_audit_log(client: AsyncClient, db_session: AsyncSe
 
 # ── Reject ────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_reject_invoice(client: AsyncClient, db_session: AsyncSession) -> None:
     doc, inv = await seed_doc_and_invoice(db_session, needs_review=True)
@@ -208,6 +212,7 @@ async def test_reject_invoice_not_found(client: AsyncClient) -> None:
 
 
 # ── Field update ──────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_update_field(client: AsyncClient, db_session: AsyncSession) -> None:
@@ -265,6 +270,7 @@ async def test_update_field_wrong_invoice(client: AsyncClient, db_session: Async
 
 # ── Vendors ───────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_list_vendors_empty(client: AsyncClient) -> None:
     res = await client.get("/vendors/")
@@ -319,6 +325,7 @@ async def test_update_vendor_not_found(client: AsyncClient) -> None:
 
 
 # ── Invoices ──────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_get_invoice(client: AsyncClient, db_session: AsyncSession) -> None:

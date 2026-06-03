@@ -1,4 +1,7 @@
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
+from httpx import AsyncClient
 from pydantic import BaseModel
 
 from invoice_pipeline.config import (
@@ -32,9 +35,8 @@ class SettingsUpdate(BaseModel):
 
 
 @router.get("/ollama-models")
-async def get_ollama_models(base_url: str | None = None) -> dict:
+async def get_ollama_models(base_url: str | None = None) -> dict[str, Any]:
     url = base_url or settings.OLLAMA_BASE_URL
-    from httpx import AsyncClient
     try:
         async with AsyncClient(timeout=3.0) as client:
             resp = await client.get(f"{url.rstrip('/')}/models")
@@ -48,9 +50,8 @@ async def get_ollama_models(base_url: str | None = None) -> dict:
 
 
 @router.get("/lm-studio-models")
-async def get_lm_studio_models(base_url: str | None = None) -> dict:
+async def get_lm_studio_models(base_url: str | None = None) -> dict[str, Any]:
     url = base_url or settings.LM_STUDIO_BASE_URL
-    from httpx import AsyncClient
     try:
         async with AsyncClient(timeout=3.0) as client:
             resp = await client.get(f"{url.rstrip('/')}/models")
@@ -64,19 +65,21 @@ async def get_lm_studio_models(base_url: str | None = None) -> dict:
 
 
 @router.get("/llamacpp/health")
-async def llamacpp_health(base_url: str | None = None) -> dict:
+async def llamacpp_health(base_url: str | None = None) -> dict[str, Any]:
     from invoice_pipeline.llm.llamacpp_client import health_check
+
     return await health_check(base_url)
 
 
 @router.get("/llamacpp/models")
-async def llamacpp_models(base_url: str | None = None) -> dict:
+async def llamacpp_models(base_url: str | None = None) -> dict[str, Any]:
     from invoice_pipeline.llm.llamacpp_client import list_models
+
     return await list_models(base_url)
 
 
 @router.get("/")
-async def get_settings() -> dict:
+async def get_settings() -> dict[str, Any]:
     return {
         "llm_provider": settings.LLM_PROVIDER.value,
         "lm_studio_model": settings.LM_STUDIO_MODEL,
@@ -101,7 +104,7 @@ async def get_settings() -> dict:
 
 
 @router.patch("/")
-async def update_settings(body: SettingsUpdate) -> dict:
+async def update_settings(body: SettingsUpdate) -> dict[str, Any]:
     if body.llm_provider is not None:
         try:
             settings.LLM_PROVIDER = LLMProviderName(body.llm_provider)
@@ -154,6 +157,7 @@ async def update_settings(body: SettingsUpdate) -> dict:
 
     # Reset cached provider so the next request rebuilds with new values.
     from invoice_pipeline.llm import factory
+
     factory._provider_instance = None
 
     # Eagerly rebuild to surface configuration errors immediately + warm cache.

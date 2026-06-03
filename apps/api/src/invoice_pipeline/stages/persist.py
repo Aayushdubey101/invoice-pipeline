@@ -11,9 +11,16 @@ from invoice_pipeline.schemas import Document, DocumentStatus, PipelineError
 log = structlog.get_logger()
 
 _SCALAR_FIELDS = (
-    "invoice_number", "invoice_date", "due_date", "buyer_name",
-    "subtotal", "tax_amount", "total_amount", "currency",
-    "payment_terms", "purchase_order",
+    "invoice_number",
+    "invoice_date",
+    "due_date",
+    "buyer_name",
+    "subtotal",
+    "tax_amount",
+    "total_amount",
+    "currency",
+    "payment_terms",
+    "purchase_order",
 )
 
 
@@ -37,12 +44,16 @@ async def persist(doc: Document, session: AsyncSession) -> Document:
             db_doc.errors = [e.model_dump() for e in doc.errors]
 
         if doc.extracted is not None:
-            existing_inv = (await session.execute(
-                select(models.Invoice).where(models.Invoice.document_id == doc.document_id)
-            )).scalar_one_or_none()
+            existing_inv = (
+                await session.execute(
+                    select(models.Invoice).where(models.Invoice.document_id == doc.document_id)
+                )
+            ).scalar_one_or_none()
             if existing_inv:
                 await session.execute(
-                    delete(models.InvoiceField).where(models.InvoiceField.invoice_id == existing_inv.id)
+                    delete(models.InvoiceField).where(
+                        models.InvoiceField.invoice_id == existing_inv.id
+                    )
                 )
                 await session.execute(
                     delete(models.LineItem).where(models.LineItem.invoice_id == existing_inv.id)
@@ -55,7 +66,9 @@ async def persist(doc: Document, session: AsyncSession) -> Document:
             invoice_row = models.Invoice(
                 document_id=doc.document_id,
                 invoice_number=doc.extracted.invoice_number.value,
-                invoice_date=canon.invoice_date.isoformat() if canon and canon.invoice_date else None,
+                invoice_date=canon.invoice_date.isoformat()
+                if canon and canon.invoice_date
+                else None,
                 due_date=canon.due_date.isoformat() if canon and canon.due_date else None,
                 buyer_name=doc.extracted.buyer_name.value,
                 subtotal=canon.subtotal if canon else None,
@@ -83,7 +96,9 @@ async def persist(doc: Document, session: AsyncSession) -> Document:
             stage="persist",
             action="upsert",
             after_hash=hashlib.sha256(
-                json.dumps(doc.extracted.model_dump() if doc.extracted else {}, sort_keys=True).encode()
+                json.dumps(
+                    doc.extracted.model_dump() if doc.extracted else {}, sort_keys=True
+                ).encode()
             ).hexdigest(),
             extra={"errors": len(doc.errors)},
         )
@@ -102,9 +117,13 @@ async def persist(doc: Document, session: AsyncSession) -> Document:
 
     except Exception as exc:
         await session.rollback()
-        log.error("pipeline_stage_error", stage="persist", document_id=doc.document_id, error=str(exc))
+        log.error(
+            "pipeline_stage_error", stage="persist", document_id=doc.document_id, error=str(exc)
+        )
         error = PipelineError(stage="persist", message=str(exc))
-        return doc.model_copy(update={"errors": [*doc.errors, error], "status": DocumentStatus.FAILED})
+        return doc.model_copy(
+            update={"errors": [*doc.errors, error], "status": DocumentStatus.FAILED}
+        )
 
 
 def _compute_status(doc: Document) -> DocumentStatus:
@@ -119,7 +138,7 @@ def _compute_status(doc: Document) -> DocumentStatus:
 def _build_field_rows(invoice_id: str, doc: Document) -> list[models.InvoiceField]:
     from invoice_pipeline.config import settings
 
-    rows = []
+    rows: list[models.InvoiceField] = []
     if doc.extracted is None:
         return rows
     for field_name in _SCALAR_FIELDS:
@@ -140,7 +159,7 @@ def _build_field_rows(invoice_id: str, doc: Document) -> list[models.InvoiceFiel
 
 
 def _build_line_item_rows(invoice_id: str, doc: Document) -> list[models.LineItem]:
-    rows = []
+    rows: list[models.LineItem] = []
     if doc.extracted is None:
         return rows
     for i, li in enumerate(doc.extracted.line_items):

@@ -28,7 +28,8 @@ class LLMProvider(Protocol):
 class NoLLMProviderConfigured(Exception):
     def __init__(self, message: str | None = None) -> None:
         super().__init__(
-            message or (
+            message
+            or (
                 "No LLM provider configured. Set LLM_PROVIDER env var to one of: "
                 "lm_studio, openai, anthropic, gemini. "
                 "Or set ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY for auto-detection. "

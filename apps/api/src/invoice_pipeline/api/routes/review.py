@@ -1,14 +1,15 @@
-from pydantic import BaseModel
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from invoice_pipeline.api.metrics import REVIEW_ACTIONS_TOTAL
-from invoice_pipeline.db.session import get_session
 from invoice_pipeline.db import models
+from invoice_pipeline.db.session import get_session
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -18,7 +19,7 @@ class FieldUpdateBody(BaseModel):
     reviewed_value: str | None
 
 
-def _queue_item(inv: models.Invoice) -> dict:
+def _queue_item(inv: models.Invoice) -> dict[str, Any]:
     return {
         "id": inv.id,
         "document_id": inv.document_id,
@@ -38,7 +39,7 @@ def _queue_item(inv: models.Invoice) -> dict:
 
 
 @router.get("/queue")
-async def review_queue(session: AsyncSession = Depends(get_session)) -> dict:
+async def review_queue(session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
     result = await session.execute(
         select(models.Invoice)
         .where(models.Invoice.needs_review == True)  # noqa: E712
@@ -57,7 +58,7 @@ async def review_queue(session: AsyncSession = Depends(get_session)) -> dict:
 async def approve_invoice(
     invoice_id: str,
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> dict[str, Any]:
     result = await session.execute(
         select(models.Invoice)
         .where(models.Invoice.id == invoice_id)
@@ -95,7 +96,7 @@ async def approve_invoice(
 async def reject_invoice(
     invoice_id: str,
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> dict[str, Any]:
     result = await session.execute(
         select(models.Invoice)
         .where(models.Invoice.id == invoice_id)
@@ -128,7 +129,7 @@ async def update_field(
     field_id: str,
     body: FieldUpdateBody,
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> dict[str, Any]:
     result = await session.execute(
         select(models.InvoiceField)
         .where(models.InvoiceField.id == field_id)

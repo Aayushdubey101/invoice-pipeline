@@ -33,6 +33,13 @@ async def field_extract(doc: Document) -> Document:
         )
         return doc.model_copy(update={"extracted": invoice})
     except Exception as exc:
-        log.error("pipeline_stage_error", stage="field_extract", document_id=doc.document_id, error=str(exc))
+        log.error(
+            "pipeline_stage_error",
+            stage="field_extract",
+            document_id=doc.document_id,
+            error=str(exc),
+        )
         error = PipelineError(stage="field_extract", message=f"LLM extraction failed: {exc}")
-        return doc.model_copy(update={"errors": [*doc.errors, error], "status": DocumentStatus.FAILED})
+        return doc.model_copy(
+            update={"errors": [*doc.errors, error], "status": DocumentStatus.FAILED}
+        )

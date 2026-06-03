@@ -1,4 +1,5 @@
 import io
+from typing import Any
 
 import structlog
 
@@ -11,9 +12,10 @@ class PaddleOCREngine:
     def __init__(self) -> None:
         self._ocr = None
 
-    def _get_ocr(self):
+    def _get_ocr(self) -> Any:
         if self._ocr is None:
             from paddleocr import PaddleOCR
+
             self._ocr = PaddleOCR(use_angle_cls=True, lang="en", show_log=False)
         return self._ocr
 

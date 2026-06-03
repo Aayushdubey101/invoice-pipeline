@@ -102,12 +102,42 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["UP042", "N818", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
 
 [tool.mypy]
 strict = true
 python_version = "3.11"
 plugins = ["pydantic.mypy"]
 
+[[tool.mypy.overrides]]
+module = [
+    "dateparser.*",
+    "pytesseract.*",
+    "fitz.*",
+    "paddleocr.*",
+    "babel.*",
+    "python_stdnum.*",
+    "slowapi.*",
+    "prometheus_client.*",
+    "reportlab.*",
+    "unstructured.*",
+]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["invoice_pipeline"]
+
+[tool.coverage.paths]
+source = [
+    "src/invoice_pipeline",
+    "**/.venv/Lib/site-packages/invoice_pipeline",
+    "**/site-packages/invoice_pipeline",
+]
+

@@ -28,7 +28,12 @@ async def text_extract(doc: Document) -> Document:
         )
         return doc.model_copy(update={"pages": pages, "raw_text": raw_text})
     except Exception as exc:
-        log.error("pipeline_stage_error", stage="text_extract", document_id=doc.document_id, error=str(exc))
+        log.error(
+            "pipeline_stage_error",
+            stage="text_extract",
+            document_id=doc.document_id,
+            error=str(exc),
+        )
         error = PipelineError(stage="text_extract", message=str(exc))
         return doc.model_copy(update={"errors": [*doc.errors, error]})
 
@@ -77,7 +82,7 @@ def _extract_email(file_bytes: bytes) -> list[Page]:
     try:
         from unstructured.partition.email import partition_email
 
-        elements = partition_email(file=io.BytesIO(file_bytes))
+        elements = partition_email(file=io.BytesIO(file_bytes), paragraph_grouper=False)
         text = "\n".join(str(e) for e in elements)
         return [Page(page_num=0, text=text)]
     except Exception:
@@ -99,15 +104,17 @@ def _extract_email_stdlib(file_bytes: bytes) -> list[Page]:
         ct = part.get_content_type()
         if ct == "text/plain":
             payload = part.get_payload(decode=True)
-            if payload:
+            if isinstance(payload, bytes):
                 parts.append(payload.decode("utf-8", errors="replace"))
         elif ct == "text/html":
             import html
+
             payload = part.get_payload(decode=True)
-            if payload:
+            if isinstance(payload, bytes):
                 raw_html = payload.decode("utf-8", errors="replace")
                 # strip tags for plain text approximation
                 import re
+
                 text = re.sub(r"<[^>]+>", " ", raw_html)
                 parts.append(html.unescape(text))
 

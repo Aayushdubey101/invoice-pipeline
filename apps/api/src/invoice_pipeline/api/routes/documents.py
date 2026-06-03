@@ -1,6 +1,7 @@
 import hashlib
 import mimetypes
 from pathlib import Path
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
@@ -10,10 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from invoice_pipeline.api.metrics import UPLOAD_ERRORS_TOTAL, UPLOADS_TOTAL
-from invoice_pipeline.db.session import get_session
 from invoice_pipeline.db import models
+from invoice_pipeline.db.session import get_session
 from invoice_pipeline.pipeline import run_pipeline
-from invoice_pipeline.schemas import DocumentStatus
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -27,12 +27,16 @@ async def upload_document(
     file: UploadFile,
     force_reprocess: bool = Query(False),
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> dict[str, Any]:
     file_bytes = await file.read()
     if len(file_bytes) > _MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="File exceeds 50 MB limit")
 
-    mime_type = file.content_type or mimetypes.guess_type(file.filename or "")[0] or "application/octet-stream"
+    mime_type = (
+        file.content_type
+        or mimetypes.guess_type(file.filename or "")[0]
+        or "application/octet-stream"
+    )
     filename = file.filename or "upload"
 
     doc_id = hashlib.sha256(file_bytes).hexdigest()
@@ -43,7 +47,7 @@ async def upload_document(
         and not existing.errors
         and not force_reprocess
     )
-    if already_clean:
+    if existing is not None and already_clean:
         return {
             "document_id": existing.id,
             "status": existing.status,
@@ -58,14 +62,14 @@ async def upload_document(
             mime_type=mime_type,
             session=session,
         )
-        
+
         # Save file bytes to disk so they can be retrieved by the frontend via /documents/{id}/file
         upload_dir = Path(__file__).resolve().parents[4] / "data" / "uploads"
         upload_dir.mkdir(parents=True, exist_ok=True)
         file_path = upload_dir / doc.document_id
         with open(file_path, "wb") as f:
             f.write(file_bytes)
-            
+
     except ValueError as exc:
         UPLOAD_ERRORS_TOTAL.inc()
         raise HTTPException(status_code=422, detail=str(exc))
@@ -106,7 +110,7 @@ async def get_document_file(
 async def get_document(
     document_id: str,
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> dict[str, Any]:
     stmt = (
         select(models.Document)
         .options(selectinload(models.Document.invoice))
@@ -116,7 +120,7 @@ async def get_document(
     if db_doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    result: dict = {
+    result: dict[str, Any] = {
         "document_id": db_doc.id,
         "filename": db_doc.filename,
         "mime_type": db_doc.mime_type,

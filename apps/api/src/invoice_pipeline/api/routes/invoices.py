@@ -1,10 +1,12 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from invoice_pipeline.db.session import get_session
 from invoice_pipeline.db import models
+from invoice_pipeline.db.session import get_session
 
 router = APIRouter()
 
@@ -13,7 +15,7 @@ router = APIRouter()
 async def get_invoice(
     invoice_id: str,
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> dict[str, Any]:
     result = await session.execute(
         select(models.Invoice)
         .where(models.Invoice.id == invoice_id)

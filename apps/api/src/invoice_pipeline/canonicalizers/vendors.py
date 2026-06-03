@@ -9,6 +9,7 @@ Returns (vendor_id, matched: bool)
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 
 import structlog
 from sqlalchemy import select
@@ -58,14 +59,14 @@ async def match_or_create_vendor(
     return new_vendor.id, False
 
 
-def _fuzzy_match(name: str, vendors: list[Vendor]) -> str | None:
+def _fuzzy_match(name: str, vendors: Sequence[Vendor]) -> str | None:
     try:
         from rapidfuzz import fuzz, process
 
         candidates: dict[str, str] = {}  # display_name → vendor_id
         for v in vendors:
             candidates[v.canonical_name] = v.id
-            for alias in (v.aliases or []):
+            for alias in v.aliases or []:
                 candidates[str(alias)] = v.id
 
         if not candidates:
@@ -79,7 +80,7 @@ def _fuzzy_match(name: str, vendors: list[Vendor]) -> str | None:
         return None
 
 
-async def _embedding_match(name: str, vendors: list[Vendor]) -> str | None:
+async def _embedding_match(name: str, vendors: Sequence[Vendor]) -> str | None:
     try:
         import chromadb
         from sentence_transformers import SentenceTransformer
@@ -97,7 +98,7 @@ async def _embedding_match(name: str, vendors: list[Vendor]) -> str | None:
         # Chroma returns L2 distance; convert to cosine similarity approximation
         # For normalized vectors: cosine_sim = 1 - (L2^2 / 2)
         dist = results["distances"][0][0]
-        cosine_sim = 1.0 - (dist ** 2) / 2.0
+        cosine_sim = 1.0 - (dist**2) / 2.0
 
         if cosine_sim >= _COSINE_THRESHOLD:
             vendor_id = results["ids"][0][0]

@@ -106,7 +106,6 @@ export default function SettingsPage() {
 
   const loadData = async () => {
     try {
-      setLoading(true);
       const [statusRes, settingsRes] = await Promise.all([
         apiClient.llm.status(),
         apiClient.settings.get(),
@@ -141,7 +140,9 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const testLlamaCpp = async () => {
@@ -485,7 +486,7 @@ export default function SettingsPage() {
                 <div>
                   <p className="font-semibold">Local LM Studio instance unreachable</p>
                   <p className="mt-0.5 leading-relaxed">
-                    Make sure LM Studio is open, model is loaded, and "Local Server" is started on port 1234.
+                    Make sure LM Studio is open, model is loaded, and &apos;Local Server&apos; is started on port 1234.
                   </p>
                 </div>
               </div>

@@ -1,10 +1,19 @@
 from decimal import Decimal, InvalidOperation
 
-
 _SYMBOL_MAP = {
-    "$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY", "₹": "INR",
-    "₩": "KRW", "₺": "TRY", "₽": "RUB", "R$": "BRL", "A$": "AUD",
-    "C$": "CAD", "HK$": "HKD", "S$": "SGD",
+    "$": "USD",
+    "€": "EUR",
+    "£": "GBP",
+    "¥": "JPY",
+    "₹": "INR",
+    "₩": "KRW",
+    "₺": "TRY",
+    "₽": "RUB",
+    "R$": "BRL",
+    "A$": "AUD",
+    "C$": "CAD",
+    "HK$": "HKD",
+    "S$": "SGD",
 }
 
 
@@ -30,6 +39,7 @@ def normalize_currency(value: str | None) -> str | None:
     upper = v.upper()
     try:
         from babel.numbers import get_currency_name
+
         get_currency_name(upper, locale="en")
         return upper
     except Exception:

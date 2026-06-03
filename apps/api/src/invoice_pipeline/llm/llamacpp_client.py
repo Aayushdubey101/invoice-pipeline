@@ -9,7 +9,8 @@ from __future__ import annotations
 import json
 import re
 import time
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import structlog
 from httpx import AsyncClient
@@ -36,7 +37,7 @@ def _health_url(base_url: str) -> str:
     return f"{root}/health"
 
 
-async def health_check(base_url: str | None = None) -> dict:
+async def health_check(base_url: str | None = None) -> dict[str, Any]:
     target = base_url or settings.LLAMACPP_BASE_URL
     url = _health_url(target)
     started = time.monotonic()
@@ -45,7 +46,7 @@ async def health_check(base_url: str | None = None) -> dict:
             resp = await client.get(url)
             latency_ms = (time.monotonic() - started) * 1000
             ok = resp.status_code == 200
-            body: dict | str
+            body: dict[str, Any] | str
             try:
                 body = resp.json()
             except Exception:
@@ -66,7 +67,7 @@ async def health_check(base_url: str | None = None) -> dict:
         }
 
 
-async def list_models(base_url: str | None = None) -> dict:
+async def list_models(base_url: str | None = None) -> dict[str, Any]:
     target = _normalize_base_url(base_url or settings.LLAMACPP_BASE_URL)
     url = f"{target}/models"
     try:
@@ -206,7 +207,7 @@ class LlamaCppProvider:
             if delta:
                 yield delta
 
-    def _build_meta(self, raw_response, start: float, mode: str) -> ExtractionMeta:
+    def _build_meta(self, raw_response: Any, start: float, mode: str) -> ExtractionMeta:
         latency_ms = (time.monotonic() - start) * 1000
         usage = getattr(raw_response, "usage", None)
         tokens_in = getattr(usage, "prompt_tokens", 0) if usage else 0

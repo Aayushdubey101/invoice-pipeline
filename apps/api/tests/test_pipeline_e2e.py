@@ -4,7 +4,7 @@ Uses SQLite in-memory DB + mocked LLM provider.
 """
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -17,6 +17,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 async def db_session():
@@ -62,11 +63,14 @@ def mock_llm():
     mock_provider = AsyncMock()
     mock_provider.extract = AsyncMock(return_value=(invoice, meta))
     with patch("invoice_pipeline.llm.factory._provider_instance", mock_provider):
-        with patch("invoice_pipeline.stages.field_extract.get_provider", return_value=mock_provider):
+        with patch(
+            "invoice_pipeline.stages.field_extract.get_provider", return_value=mock_provider
+        ):
             yield mock_provider
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_ingest_stage():
@@ -140,9 +144,8 @@ async def test_text_extract_pdf():
 
 @pytest.mark.asyncio
 async def test_field_extract_calls_llm(mock_llm, db_session: AsyncSession):
-    from invoice_pipeline.stages.ingest import ingest
-    from invoice_pipeline.stages.text_extract import text_extract
     from invoice_pipeline.stages.field_extract import field_extract
+    from invoice_pipeline.stages.ingest import ingest
 
     pdf_bytes = (FIXTURES / "sample_invoice.pdf").read_bytes()
     doc = await ingest("sample_invoice.pdf", pdf_bytes, "application/pdf")

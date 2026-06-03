@@ -4,7 +4,7 @@ OCR engines mocked (heavy deps not installed in dev).
 """
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -17,6 +17,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 async def db_session():
@@ -48,6 +49,7 @@ def mock_llm():
 
 
 # ── classify routing ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_classify_scanned_pdf():
@@ -87,11 +89,12 @@ async def test_classify_email():
 
 # ── OCR stage ─────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_ocr_fallback_calls_engine():
+    from invoice_pipeline.schemas import Page
     from invoice_pipeline.stages.ingest import ingest
     from invoice_pipeline.stages.ocr_fallback import ocr_fallback
-    from invoice_pipeline.schemas import Page
 
     png = (FIXTURES / "invoice_image.png").read_bytes()
     doc = await ingest("invoice.png", png, "image/png")
@@ -144,12 +147,16 @@ def test_ocr_engine_paddle_import_error_falls_back_to_tesseract():
     with patch("invoice_pipeline.stages.ocr_fallback.settings") as s:
         s.OCR_ENGINE = OCREngineName.PADDLEOCR
         # Simulate paddle module's internal import failing at instantiation time
-        with patch("invoice_pipeline.ocr.paddle.PaddleOCREngine", side_effect=ImportError("paddleocr not installed")):
+        with patch(
+            "invoice_pipeline.ocr.paddle.PaddleOCREngine",
+            side_effect=ImportError("paddleocr not installed"),
+        ):
             engine = _load_engine()
             assert isinstance(engine, TesseractEngine)
 
 
 # ── Email extraction ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_email_text_extract():
@@ -158,7 +165,13 @@ async def test_email_text_extract():
 
     eml = (FIXTURES / "invoice_email.eml").read_bytes()
     doc = await ingest("invoice.eml", eml, "message/rfc822")
-    doc = doc.model_copy(update={"doc_type": __import__("invoice_pipeline.schemas", fromlist=["DocumentType"]).DocumentType.EMAIL})
+    doc = doc.model_copy(
+        update={
+            "doc_type": __import__(
+                "invoice_pipeline.schemas", fromlist=["DocumentType"]
+            ).DocumentType.EMAIL
+        }
+    )
     doc = await text_extract(doc)
 
     assert "INV-2024-002" in doc.raw_text
@@ -178,6 +191,7 @@ async def test_email_stdlib_fallback():
 
 
 # ── Full pipeline through OCR path ────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_pipeline_image_via_ocr(mock_llm, db_session):

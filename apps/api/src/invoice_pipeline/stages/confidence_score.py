@@ -24,9 +24,36 @@ from invoice_pipeline.schemas import (
 log = structlog.get_logger()
 
 _ISO_4217 = {
-    "USD", "EUR", "GBP", "JPY", "CNY", "INR", "AUD", "CAD", "CHF", "HKD",
-    "SGD", "SEK", "NOK", "DKK", "MXN", "BRL", "RUB", "ZAR", "NZD", "AED",
-    "THB", "IDR", "PLN", "CZK", "HUF", "ILS", "CLP", "PKR", "PHP", "MYR",
+    "USD",
+    "EUR",
+    "GBP",
+    "JPY",
+    "CNY",
+    "INR",
+    "AUD",
+    "CAD",
+    "CHF",
+    "HKD",
+    "SGD",
+    "SEK",
+    "NOK",
+    "DKK",
+    "MXN",
+    "BRL",
+    "RUB",
+    "ZAR",
+    "NZD",
+    "AED",
+    "THB",
+    "IDR",
+    "PLN",
+    "CZK",
+    "HUF",
+    "ILS",
+    "CLP",
+    "PKR",
+    "PHP",
+    "MYR",
 }
 
 
@@ -49,13 +76,18 @@ async def score_confidence(doc: Document) -> Document:
         )
         return doc.model_copy(update={"extracted": scored, "canonicalized": canon})
     except Exception as exc:
-        log.error("pipeline_stage_error", stage="confidence_score", document_id=doc.document_id, error=str(exc))
+        log.error(
+            "pipeline_stage_error",
+            stage="confidence_score",
+            document_id=doc.document_id,
+            error=str(exc),
+        )
         error = PipelineError(stage="confidence_score", message=str(exc))
         return doc.model_copy(update={"errors": [*doc.errors, error]})
 
 
 def _apply_heuristics(invoice: Invoice, vendor_matched: bool = False) -> Invoice:
-    updates: dict = {}
+    updates: dict[str, FieldValue] = {}
 
     def _boost(fv: FieldValue, delta: float) -> FieldValue:
         return fv.model_copy(update={"confidence": min(1.0, fv.confidence + delta)})
@@ -87,8 +119,11 @@ def _check_review(invoice: Invoice) -> tuple[bool, list[str]]:
     threshold = settings.LOW_CONFIDENCE_THRESHOLD
 
     fields_to_check = (
-        "invoice_number", "invoice_date", "vendor_name",
-        "total_amount", "currency",
+        "invoice_number",
+        "invoice_date",
+        "vendor_name",
+        "total_amount",
+        "currency",
     )
     for field_name in fields_to_check:
         fv: FieldValue = getattr(invoice, field_name)
@@ -101,6 +136,7 @@ def _check_review(invoice: Invoice) -> tuple[bool, list[str]]:
 def _is_parseable_date(value: str) -> bool:
     try:
         import dateparser
+
         result = dateparser.parse(value)
         return result is not None
     except Exception:

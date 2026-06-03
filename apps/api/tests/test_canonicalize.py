@@ -18,6 +18,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 # ── DB fixture ────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 async def db_session():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
@@ -57,16 +58,19 @@ def _mock_invoice() -> Invoice:
 
 # ── Date canonicalization ─────────────────────────────────────────────────────
 
+
 def test_parse_date_iso():
-    from invoice_pipeline.canonicalizers.dates import parse_date
     from datetime import date
+
+    from invoice_pipeline.canonicalizers.dates import parse_date
 
     assert parse_date("2024-01-15") == date(2024, 1, 15)
 
 
 def test_parse_date_written():
-    from invoice_pipeline.canonicalizers.dates import parse_date
     from datetime import date
+
+    from invoice_pipeline.canonicalizers.dates import parse_date
 
     result = parse_date("January 15, 2024")
     assert result == date(2024, 1, 15)
@@ -88,6 +92,7 @@ def test_parse_date_invalid():
 
 
 # ── Currency canonicalization ─────────────────────────────────────────────────
+
 
 def test_parse_amount_plain():
     from invoice_pipeline.canonicalizers.currency import parse_amount
@@ -124,6 +129,7 @@ def test_normalize_currency_symbol():
 
 # ── Tax ID validation ─────────────────────────────────────────────────────────
 
+
 def test_validate_tax_id_returns_value():
     from invoice_pipeline.canonicalizers.tax_ids import validate_tax_id
 
@@ -138,6 +144,7 @@ def test_validate_tax_id_none():
 
 
 # ── Vendor matching ───────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_vendor_exact_match(db_with_vendors):
@@ -168,8 +175,9 @@ async def test_vendor_alias_match(db_with_vendors):
 
 @pytest.mark.asyncio
 async def test_vendor_no_match_creates_pending(db_session):
-    from invoice_pipeline.canonicalizers.vendors import match_or_create_vendor
     from sqlalchemy import select
+
+    from invoice_pipeline.canonicalizers.vendors import match_or_create_vendor
 
     vendor_id, matched = await match_or_create_vendor("Unknown Vendor XYZ", db_session)
     assert matched is False
@@ -177,6 +185,7 @@ async def test_vendor_no_match_creates_pending(db_session):
 
     # verify pending vendor was created
     from invoice_pipeline.db.models import Vendor
+
     created = (await db_session.execute(select(Vendor).where(Vendor.id == vendor_id))).scalar_one()
     assert created.status == "pending_review"
     assert created.canonical_name == "Unknown Vendor XYZ"
@@ -193,6 +202,7 @@ async def test_vendor_two_invoices_same_vendor_same_id(db_with_vendors):
 
 
 # ── Canonicalize stage ────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_canonicalize_stage(db_with_vendors):
@@ -213,9 +223,10 @@ async def test_canonicalize_stage(db_with_vendors):
 
 @pytest.mark.asyncio
 async def test_canonicalize_date_parsed(db_with_vendors):
+    from datetime import date
+
     from invoice_pipeline.stages.canonicalize import canonicalize
     from invoice_pipeline.stages.ingest import ingest
-    from datetime import date
 
     pdf = (FIXTURES / "sample_invoice.pdf").read_bytes()
     doc = await ingest("test.pdf", pdf, "application/pdf")
@@ -227,6 +238,7 @@ async def test_canonicalize_date_parsed(db_with_vendors):
 
 
 # ── Confidence score with vendor boost ───────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_confidence_score_vendor_boost():
@@ -243,6 +255,7 @@ async def test_confidence_score_vendor_boost():
 
 
 # ── Notify stage ──────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_notify_skipped_when_no_webhook(db_session):
@@ -309,6 +322,7 @@ async def test_notify_webhook_failure_non_fatal(db_session):
 
 
 # ── Full pipeline Phase 5 ─────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_full_pipeline_with_canonicalization(db_with_vendors):

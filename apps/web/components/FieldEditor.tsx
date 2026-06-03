@@ -109,7 +109,7 @@ export function FieldEditor({ field, onSave }: FieldEditorProps) {
 
         {field.evidence && !editing && (
           <p className="text-[11px] text-muted-foreground bg-muted/40 rounded px-1.5 py-0.5 mt-1 italic line-clamp-2">
-            "{field.evidence}"
+            &quot;{field.evidence}&quot;
           </p>
         )}
       </div>

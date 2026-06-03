@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock, XCircle, ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
 import type { ReviewQueueItem } from "@/lib/types";
 

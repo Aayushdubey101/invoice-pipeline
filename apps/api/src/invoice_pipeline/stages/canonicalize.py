@@ -22,7 +22,7 @@ async def canonicalize(doc: Document, session: AsyncSession) -> Document:
         subtotal = parse_amount(inv.subtotal.value)
         tax_amount = parse_amount(inv.tax_amount.value)
         total_amount = parse_amount(inv.total_amount.value)
-        vendor_tax_id = validate_tax_id(inv.vendor_tax_id.value)
+        _vendor_tax_id = validate_tax_id(inv.vendor_tax_id.value)
 
         vendor_id = None
         vendor_matched = False
@@ -55,6 +55,11 @@ async def canonicalize(doc: Document, session: AsyncSession) -> Document:
         )
         return doc.model_copy(update={"canonicalized": canon, "vendor_matched": vendor_matched})
     except Exception as exc:
-        log.error("pipeline_stage_error", stage="canonicalize", document_id=doc.document_id, error=str(exc))
+        log.error(
+            "pipeline_stage_error",
+            stage="canonicalize",
+            document_id=doc.document_id,
+            error=str(exc),
+        )
         error = PipelineError(stage="canonicalize", message=str(exc))
         return doc.model_copy(update={"errors": [*doc.errors, error]})

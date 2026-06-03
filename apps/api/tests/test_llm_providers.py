@@ -1,5 +1,5 @@
 """LLM provider tests — all providers mocked at the HTTP layer."""
-from typing import Any
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -24,6 +24,7 @@ def _mock_invoice() -> Invoice:
 
 # ── Factory auto-detect tests ─────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_factory_explicit_provider_openai() -> None:
     with patch("invoice_pipeline.llm.factory.settings") as mock_settings:
@@ -32,6 +33,7 @@ async def test_factory_explicit_provider_openai() -> None:
         mock_settings.LLM_PROVIDER.__eq__ = lambda self, other: str(other) == "openai"
 
         from invoice_pipeline.config import LLMProviderName
+
         with patch("invoice_pipeline.llm.factory.settings") as s:
             s.LLM_PROVIDER = LLMProviderName.OPENAI
             s.OPENAI_API_KEY = "sk-test"
@@ -44,6 +46,7 @@ async def test_factory_explicit_provider_openai() -> None:
             with patch("invoice_pipeline.llm.openai_client.instructor"):
                 with patch("invoice_pipeline.llm.openai_client.AsyncOpenAI"):
                     from invoice_pipeline.llm.factory import create_provider
+
                     provider = await create_provider()
                     assert provider.provider_name == "openai"
 
@@ -63,6 +66,7 @@ async def test_factory_auto_detects_lm_studio() -> None:
         with patch("invoice_pipeline.llm.factory._lm_studio_reachable", return_value=True):
             with patch("invoice_pipeline.llm.lm_studio.AsyncOpenAI"):
                 from invoice_pipeline.llm.factory import create_provider
+
                 provider = await create_provider()
                 assert provider.provider_name == "lm_studio"
 
@@ -83,6 +87,7 @@ async def test_factory_auto_falls_back_to_anthropic() -> None:
             with patch("invoice_pipeline.llm.anthropic_client.instructor"):
                 with patch("invoice_pipeline.llm.anthropic_client.anthropic"):
                     from invoice_pipeline.llm.factory import create_provider
+
                     provider = await create_provider()
                     assert provider.provider_name == "anthropic"
 
@@ -100,11 +105,13 @@ async def test_factory_raises_when_nothing_configured() -> None:
 
         with patch("invoice_pipeline.llm.factory._lm_studio_reachable", return_value=False):
             from invoice_pipeline.llm.factory import create_provider
+
             with pytest.raises(NoLLMProviderConfigured):
                 await create_provider()
 
 
 # ── Schema enforcement: LLM must return Invoice shape ─────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_lm_studio_returns_invoice_schema() -> None:
@@ -123,6 +130,7 @@ async def test_lm_studio_returns_invoice_schema() -> None:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
 
         from invoice_pipeline.llm.lm_studio import LMStudioProvider
+
         with patch("invoice_pipeline.llm.lm_studio.settings") as s:
             s.LM_STUDIO_BASE_URL = "http://localhost:1234/v1"
             s.LM_STUDIO_MODEL = "test"
@@ -131,8 +139,10 @@ async def test_lm_studio_returns_invoice_schema() -> None:
             with patch("invoice_pipeline.llm.lm_studio._get_active_models", return_value=["test"]):
                 provider = LMStudioProvider()
                 result, meta = await provider.extract(
-                    text="Invoice text", schema=Invoice,
-                    system_prompt="Extract invoice", temperature=0.0,
+                    text="Invoice text",
+                    schema=Invoice,
+                    system_prompt="Extract invoice",
+                    temperature=0.0,
                 )
 
     assert isinstance(result, Invoice)
@@ -158,6 +168,7 @@ async def test_openai_provider_schema_enforcement() -> None:
             )
 
             from invoice_pipeline.llm.openai_client import OpenAIProvider
+
             with patch("invoice_pipeline.llm.openai_client.settings") as s:
                 s.OPENAI_API_KEY = "sk-test"
                 s.OPENAI_MODEL = "gpt-4o-mini"
@@ -165,8 +176,10 @@ async def test_openai_provider_schema_enforcement() -> None:
 
                 provider = OpenAIProvider()
                 result, meta = await provider.extract(
-                    text="Invoice text", schema=Invoice,
-                    system_prompt="Extract invoice", temperature=0.0,
+                    text="Invoice text",
+                    schema=Invoice,
+                    system_prompt="Extract invoice",
+                    temperature=0.0,
                 )
 
     assert isinstance(result, Invoice)
@@ -191,6 +204,7 @@ async def test_anthropic_provider_schema_enforcement() -> None:
             )
 
             from invoice_pipeline.llm.anthropic_client import AnthropicProvider
+
             with patch("invoice_pipeline.llm.anthropic_client.settings") as s:
                 s.ANTHROPIC_API_KEY = "sk-ant-test"
                 s.ANTHROPIC_MODEL = "claude-sonnet-4-5"
@@ -198,8 +212,10 @@ async def test_anthropic_provider_schema_enforcement() -> None:
 
                 provider = AnthropicProvider()
                 result, meta = await provider.extract(
-                    text="Invoice text", schema=Invoice,
-                    system_prompt="Extract invoice", temperature=0.0,
+                    text="Invoice text",
+                    schema=Invoice,
+                    system_prompt="Extract invoice",
+                    temperature=0.0,
                 )
 
     assert isinstance(result, Invoice)
@@ -223,6 +239,7 @@ async def test_gemini_provider_schema_enforcement() -> None:
             )
 
             from invoice_pipeline.llm.gemini_client import GeminiProvider
+
             with patch("invoice_pipeline.llm.gemini_client.settings") as s:
                 s.GEMINI_API_KEY = "AIza-test"
                 s.GEMINI_MODEL = "gemini-2.0-flash"
@@ -230,8 +247,10 @@ async def test_gemini_provider_schema_enforcement() -> None:
 
                 provider = GeminiProvider()
                 result, meta = await provider.extract(
-                    text="Invoice text", schema=Invoice,
-                    system_prompt="Extract invoice", temperature=0.0,
+                    text="Invoice text",
+                    schema=Invoice,
+                    system_prompt="Extract invoice",
+                    temperature=0.0,
                 )
 
     assert isinstance(result, Invoice)

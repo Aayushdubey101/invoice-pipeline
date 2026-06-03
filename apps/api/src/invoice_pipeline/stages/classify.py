@@ -19,7 +19,9 @@ async def classify(doc: Document) -> Document:
         )
         return doc.model_copy(update={"doc_type": doc_type})
     except Exception as exc:
-        log.error("pipeline_stage_error", stage="classify", document_id=doc.document_id, error=str(exc))
+        log.error(
+            "pipeline_stage_error", stage="classify", document_id=doc.document_id, error=str(exc)
+        )
         error = PipelineError(stage="classify", message=str(exc))
         return doc.model_copy(update={"errors": [*doc.errors, error]})
 

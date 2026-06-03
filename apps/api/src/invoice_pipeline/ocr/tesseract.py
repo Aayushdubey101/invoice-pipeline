@@ -9,8 +9,6 @@ log = structlog.get_logger()
 
 class TesseractEngine:
     async def extract_pages(self, file_bytes: bytes, mime_type: str) -> list[Page]:
-        import pytesseract
-        from PIL import Image
 
         if mime_type == "application/pdf":
             return await self._extract_pdf(file_bytes)
@@ -40,6 +38,12 @@ class TesseractEngine:
             if not word_text.strip():
                 continue
             x, y, w, h = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
-            words.append(Word(text=word_text, bbox=(float(x), float(y), float(x + w), float(y + h)), page=page_num))
+            words.append(
+                Word(
+                    text=word_text,
+                    bbox=(float(x), float(y), float(x + w), float(y + h)),
+                    page=page_num,
+                )
+            )
 
         return Page(page_num=page_num, text=text.strip(), words=words)

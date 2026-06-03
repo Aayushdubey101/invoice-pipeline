@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
     JSON,
@@ -13,7 +14,6 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -37,13 +37,15 @@ class Document(Base):
     parent_document_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("documents.id"), nullable=True
     )
-    errors: Mapped[list] = mapped_column(JSON, default=list)
+    errors: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    invoice: Mapped["Invoice | None"] = relationship("Invoice", back_populates="document", uselist=False)
+    invoice: Mapped["Invoice | None"] = relationship(
+        "Invoice", back_populates="document", uselist=False
+    )
     audit_logs: Mapped[list["AuditLog"]] = relationship("AuditLog", back_populates="document")
 
 
@@ -52,7 +54,7 @@ class Vendor(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     canonical_name: Mapped[str] = mapped_column(String(512))
-    aliases: Mapped[list] = mapped_column(JSON, default=list)
+    aliases: Mapped[list[str]] = mapped_column(JSON, default=list)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     tax_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="active")
@@ -84,8 +86,10 @@ class Invoice(Base):
     payment_terms: Mapped[str | None] = mapped_column(String(256), nullable=True)
     purchase_order: Mapped[str | None] = mapped_column(String(256), nullable=True)
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False)
-    review_reasons: Mapped[list] = mapped_column(JSON, default=list)
-    raw_extraction: Mapped[dict] = mapped_column(JSON, default=dict)  # full Invoice schema
+    review_reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
+    raw_extraction: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict
+    )  # full Invoice schema
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -134,6 +138,7 @@ class LineItem(Base):
 
 class AuditLog(Base):
     """Immutable audit trail — never delete rows."""
+
     __tablename__ = "audit_log"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
@@ -144,7 +149,7 @@ class AuditLog(Base):
     before_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     after_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    extra: Mapped[dict] = mapped_column(JSON, default=dict)
+    extra: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     document: Mapped[Document] = relationship("Document", back_populates="audit_logs")

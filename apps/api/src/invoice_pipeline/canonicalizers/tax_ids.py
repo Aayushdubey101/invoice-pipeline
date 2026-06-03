@@ -8,6 +8,7 @@ def validate_tax_id(value: str | None, country: str = "US") -> str | None:
         # Try EIN (US employer identification number)
         try:
             from stdnum.us import ein
+
             if ein.is_valid(cleaned):
                 return ein.format(cleaned)
         except Exception:
@@ -16,6 +17,7 @@ def validate_tax_id(value: str | None, country: str = "US") -> str | None:
         # Try EU VAT
         try:
             from stdnum.eu import vat
+
             if vat.is_valid(cleaned):
                 return vat.compact(cleaned)
         except Exception:

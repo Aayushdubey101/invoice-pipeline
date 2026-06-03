@@ -29,6 +29,7 @@ class VendorStatus(str, Enum):
 
 # ── LLM extraction schemas ────────────────────────────────────────────────────
 
+
 class FieldValue(BaseModel):
     value: str | None = None
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -64,6 +65,7 @@ class Invoice(BaseModel):
 
 # ── Canonicalized output ──────────────────────────────────────────────────────
 
+
 class CanonicalizedInvoice(BaseModel):
     invoice_number: str | None = None
     invoice_date: date | None = None
@@ -82,6 +84,7 @@ class CanonicalizedInvoice(BaseModel):
 
 
 # ── Pipeline internal models ──────────────────────────────────────────────────
+
 
 class Word(BaseModel):
     text: str
@@ -120,6 +123,7 @@ class Document(BaseModel):
 
 # ── API response schemas ──────────────────────────────────────────────────────
 
+
 class HealthResponse(BaseModel):
     status: str = "ok"
     version: str
@@ -133,6 +137,7 @@ class LLMStatusResponse(BaseModel):
 
 class ProblemDetail(BaseModel):
     """RFC 7807 problem details."""
+
     type: str = "about:blank"
     title: str
     status: int

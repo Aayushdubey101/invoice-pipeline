@@ -12,6 +12,7 @@ HERE = Path(__file__).parent
 
 # ── Text PDF ──────────────────────────────────────────────────────────────────
 
+
 def _make_text_pdf(path: Path) -> None:
     content = b"""\
 %PDF-1.4
@@ -56,13 +57,14 @@ startxref
 
 # ── Minimal PNG (1x1 white pixel) ─────────────────────────────────────────────
 
+
 def _make_png(path: Path) -> None:
     def _chunk(name: bytes, data: bytes) -> bytes:
         c = name + data
         return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
 
     ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
-    raw = b"\x00\xFF\xFF\xFF"  # filter byte + RGB white
+    raw = b"\x00\xff\xff\xff"  # filter byte + RGB white
     idat = zlib.compress(raw)
 
     png = b"\x89PNG\r\n\x1a\n"
@@ -75,17 +77,21 @@ def _make_png(path: Path) -> None:
 
 # ── Scanned PDF (PDF wrapping a PNG image, no text layer) ─────────────────────
 
+
 def _make_scanned_pdf(path: Path) -> None:
     """PDF containing only an embedded image — no extractable text."""
+
     # Tiny 1x1 white PNG
     def _chunk(name: bytes, data: bytes) -> bytes:
         c = name + data
         return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
 
     ihdr = struct.pack(">IIBBBBB", 8, 8, 8, 2, 0, 0, 0)
-    raw_rows = b"".join(b"\x00" + b"\xFF\xFF\xFF" * 8 for _ in range(8))
+    raw_rows = b"".join(b"\x00" + b"\xff\xff\xff" * 8 for _ in range(8))
     idat = zlib.compress(raw_rows)
-    png_bytes = b"\x89PNG\r\n\x1a\n" + _chunk(b"IHDR", ihdr) + _chunk(b"IDAT", idat) + _chunk(b"IEND", b"")
+    png_bytes = (
+        b"\x89PNG\r\n\x1a\n" + _chunk(b"IHDR", ihdr) + _chunk(b"IDAT", idat) + _chunk(b"IEND", b"")
+    )
 
     # Minimal PDF with image XObject — no text operators
     pdf = b"""%PDF-1.4
@@ -113,6 +119,7 @@ endobj
 
 
 # ── .eml with plain text invoice ─────────────────────────────────────────────
+
 
 def _make_eml(path: Path) -> None:
     eml = b"""\

@@ -60,10 +60,12 @@ async def run_pipeline(
 async def _ocr_fallback(doc: Document) -> Document:
     try:
         from invoice_pipeline.stages.ocr_fallback import ocr_fallback
+
         return await ocr_fallback(doc)
     except ImportError:
         return doc
     except Exception as exc:
         from invoice_pipeline.schemas import PipelineError
+
         error = PipelineError(stage="ocr_fallback", message=str(exc))
         return doc.model_copy(update={"errors": [*doc.errors, error]})

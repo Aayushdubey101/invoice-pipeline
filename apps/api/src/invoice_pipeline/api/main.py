@@ -1,5 +1,5 @@
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 import structlog
 import uvicorn
@@ -11,11 +11,12 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from invoice_pipeline.api.routes import documents, invoices, review, vendors
+from invoice_pipeline.api.routes import settings as settings_route
 from invoice_pipeline.config import settings
 from invoice_pipeline.llm.base import NoLLMProviderConfigured
 from invoice_pipeline.llm.factory import create_provider
 from invoice_pipeline.schemas import HealthResponse, LLMStatusResponse, ProblemDetail
-from invoice_pipeline.api.routes import documents, invoices, review, vendors, settings as settings_route
 
 log = structlog.get_logger()
 
@@ -28,17 +29,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         provider = await create_provider()
         provider_name = getattr(provider, "provider_name", "unknown")
-        
+
         # Safely resolve model and endpoint strings to prevent None validation issues
-        model = (getattr(provider, "_model", None) or 
-                 getattr(settings, f"{provider_name.upper()}_MODEL", None) or 
-                 "unknown")
-                 
-        endpoint = (getattr(provider, "_base_url", None) or 
-                    getattr(getattr(provider, "_openai_client", None), "base_url", None) or
-                    getattr(getattr(provider, "_client", None), "base_url", None) or
-                    None)
-                    
+        model = (
+            getattr(provider, "_model", None)
+            or getattr(settings, f"{provider_name.upper()}_MODEL", None)
+            or "unknown"
+        )
+
+        endpoint = (
+            getattr(provider, "_base_url", None)
+            or getattr(getattr(provider, "_openai_client", None), "base_url", None)
+            or getattr(getattr(provider, "_client", None), "base_url", None)
+            or None
+        )
+
         app.state.llm_provider = provider
         app.state.llm_status = {
             "provider": provider_name,
@@ -107,14 +112,16 @@ async def metrics() -> PlainTextResponse:
 async def llm_status() -> LLMStatusResponse:
     try:
         from invoice_pipeline.llm.factory import get_provider
+
         provider = await get_provider()
         provider_name = getattr(provider, "provider_name", "unknown")
-        
+
         from invoice_pipeline.config import settings
-        
+
         model = "unknown"
         if provider_name == "lm_studio":
             from invoice_pipeline.llm.lm_studio import _get_active_models
+
             active_models = await _get_active_models()
             if active_models:
                 if settings.LM_STUDIO_MODEL in active_models:
@@ -126,15 +133,19 @@ async def llm_status() -> LLMStatusResponse:
         elif provider_name == "llamacpp":
             model = getattr(provider, "_model", None) or settings.LLAMACPP_MODEL or "local-model"
         else:
-            model = (getattr(provider, "_model", None) or
-                     getattr(settings, f"{provider_name.upper()}_MODEL", None) or
-                     "unknown")
-                 
-        endpoint = (getattr(provider, "_base_url", None) or 
-                    getattr(getattr(provider, "_openai_client", None), "base_url", None) or
-                    getattr(getattr(provider, "_client", None), "base_url", None) or
-                    None)
-        
+            model = (
+                getattr(provider, "_model", None)
+                or getattr(settings, f"{provider_name.upper()}_MODEL", None)
+                or "unknown"
+            )
+
+        endpoint = (
+            getattr(provider, "_base_url", None)
+            or getattr(getattr(provider, "_openai_client", None), "base_url", None)
+            or getattr(getattr(provider, "_client", None), "base_url", None)
+            or None
+        )
+
         status = {
             "provider": provider_name,
             "model": str(model),
@@ -143,7 +154,9 @@ async def llm_status() -> LLMStatusResponse:
         app.state.llm_status = status
     except Exception as exc:
         log.warning("llm_status_dynamic_error", error=str(exc))
-        status = getattr(app.state, "llm_status", {"provider": "none", "model": "none", "endpoint": None})
+        status = getattr(
+            app.state, "llm_status", {"provider": "none", "model": "none", "endpoint": None}
+        )
     return LLMStatusResponse(**status)
 
 
