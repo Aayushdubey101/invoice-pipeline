@@ -1,0 +1,27 @@
+services:
+  api:
+    volumes:
+      - ./apps/api/src:/app/src
+    command:
+      - sh
+      - -c
+      - >-
+        uv run alembic upgrade head &&
+        PYTHONPATH=/app/src WATCHFILES_FORCE_POLLING=1
+        uv run uvicorn invoice_pipeline.api.main:app
+        --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
+    environment:
+      DEBUG: "true"
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"
