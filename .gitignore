@@ -1,0 +1,98 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor folders
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.Spotlight-V100
+.Trashes
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+ENV/
+env/
+pip-wheel-metadata/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Byte-compiled / optimized / DLL files
+*.so
+
+# Test / coverage reports
+coverage/
+coverage.*
+
+# Node / JavaScript
+node_modules/
+/.next/
+/out/
+dist/
+build/
+*.tsbuildinfo
+.turbo/
+.parcel-cache/
+.cache/
+
+# pnpm/yarn
+.pnp/
+.pnp.*
+
+# Environment files
+.env
+# .env.local
+
+# Docker
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# Database
+*.sqlite3
+*.db
+
+# Uploaded documents (runtime data)
+apps/api/data/
+runtime_settings.json
+
+# IDE / tooling caches
+.cache/
+.history/
+
+# Uploads / runtime
+apps/api/uploads/
+tmp/
+
+# Alembic
+apps/api/alembic/versions/__pycache__/
+
+# Claude/assistant caches
+.claude_cache/
+.claude
+
+# Misc
+*.md
+# Allow core documentation files
+README.md
+ARCHITECTURE.md
+SETUP.md
+CLAUDE.md
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
