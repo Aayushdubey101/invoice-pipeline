@@ -4,6 +4,6 @@
 # Re-chown on every start (root, pre-exec) so the mount always matches the
 # image's build-time ownership before appuser touches it.
 set -e
-mkdir -p /app/config
+mkdir -p /app/config /app/.cache
 chown -R appuser:appuser /app/data/uploads /app/.cache /app/config
 exec gosu appuser "$@"

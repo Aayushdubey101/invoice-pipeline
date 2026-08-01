@@ -53,6 +53,8 @@ services:
         value: https://invoice-pipeline-api.onrender.com
       - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
         sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
       - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
         value: /sign-in
       - key: NEXT_PUBLIC_CLERK_SIGN_UP_URL
