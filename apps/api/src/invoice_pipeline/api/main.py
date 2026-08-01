@@ -3,24 +3,36 @@ from contextlib import asynccontextmanager
 
 import structlog
 import uvicorn
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
-from invoice_pipeline.api.routes import documents, invoices, review, vendors
+from invoice_pipeline.api.limiter import limiter
+from invoice_pipeline.api.routes import (
+    batch,
+    dashboard,
+    documents,
+    export,
+    invoices,
+    projects,
+    providers,
+    review,
+    session,
+    vendors,
+    workspaces,
+)
 from invoice_pipeline.api.routes import settings as settings_route
 from invoice_pipeline.config import settings
 from invoice_pipeline.llm.base import NoLLMProviderConfigured
 from invoice_pipeline.llm.factory import create_provider
 from invoice_pipeline.schemas import HealthResponse, LLMStatusResponse, ProblemDetail
+from invoice_pipeline.services.workspace_cleanup import run_cleanup
 
 log = structlog.get_logger()
-
-limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -54,7 +66,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         log.warning("llm_provider_not_configured", error=str(exc))
         app.state.llm_provider = None
         app.state.llm_status = {"provider": "none", "model": "none", "endpoint": None}
+
+    from invoice_pipeline.canonicalizers.qdrant_client import ensure_qdrant_collection
+
+    await ensure_qdrant_collection()
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(run_cleanup, "interval", hours=1, id="workspace_cleanup")
+    scheduler.start()
+    app.state.scheduler = scheduler
     yield
+    scheduler.shutdown()
 
 
 app = FastAPI(
@@ -78,9 +100,16 @@ app.add_middleware(
 
 app.include_router(documents.router, prefix="/documents", tags=["documents"])
 app.include_router(invoices.router, prefix="/invoices", tags=["invoices"])
+app.include_router(projects.router, prefix="/projects", tags=["projects"])
 app.include_router(review.router, prefix="/review", tags=["review"])
 app.include_router(vendors.router, prefix="/vendors", tags=["vendors"])
 app.include_router(settings_route.router, prefix="/settings", tags=["settings"])
+app.include_router(providers.router, prefix="/providers", tags=["providers"])
+app.include_router(batch.router, prefix="/batch", tags=["batch"])
+app.include_router(export.router, prefix="/export", tags=["export"])
+app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
+app.include_router(workspaces.router, prefix="/workspaces", tags=["workspaces"])
+app.include_router(session.router, prefix="/session", tags=["session"])
 
 
 @app.exception_handler(Exception)
