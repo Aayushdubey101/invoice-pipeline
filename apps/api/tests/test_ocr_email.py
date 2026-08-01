@@ -99,16 +99,15 @@ async def test_ocr_fallback_calls_engine():
     png = (FIXTURES / "invoice_image.png").read_bytes()
     doc = await ingest("invoice.png", png, "image/png")
 
-    mock_engine = AsyncMock()
-    mock_engine.extract_pages = AsyncMock(
-        return_value=[Page(page_num=0, text="Invoice Number: INV-OCR-001\nTotal: $500.00")]
-    )
-    with patch("invoice_pipeline.stages.ocr_fallback._load_engine", return_value=mock_engine):
+    mock_orchestrator = AsyncMock()
+    mock_orchestrator.extract_pages.return_value = ([Page(page_num=0, text="Invoice Number: INV-OCR-001\nTotal: $500.00")], [b"dummy"])
+    
+    with patch("invoice_pipeline.stages.ocr_fallback.OCROrchestrator", return_value=mock_orchestrator):
         result = await ocr_fallback(doc)
 
     assert result.raw_text != ""
     assert "INV-OCR-001" in result.raw_text
-    assert mock_engine.extract_pages.called
+    assert mock_orchestrator.extract_pages.called
 
 
 @pytest.mark.asyncio
@@ -119,9 +118,10 @@ async def test_ocr_fallback_engine_error_does_not_raise():
     png = (FIXTURES / "invoice_image.png").read_bytes()
     doc = await ingest("invoice.png", png, "image/png")
 
-    mock_engine = AsyncMock()
-    mock_engine.extract_pages = AsyncMock(side_effect=RuntimeError("OCR engine crash"))
-    with patch("invoice_pipeline.stages.ocr_fallback._load_engine", return_value=mock_engine):
+    mock_orchestrator = AsyncMock()
+    mock_orchestrator.extract_pages.side_effect = RuntimeError("OCR engine crash")
+    
+    with patch("invoice_pipeline.stages.ocr_fallback.OCROrchestrator", return_value=mock_orchestrator):
         result = await ocr_fallback(doc)
 
     assert len(result.errors) == 1
@@ -131,28 +131,32 @@ async def test_ocr_fallback_engine_error_does_not_raise():
 def test_ocr_engine_loads_tesseract_when_configured():
     from invoice_pipeline.config import OCREngineName
     from invoice_pipeline.ocr.tesseract import TesseractEngine
-    from invoice_pipeline.stages.ocr_fallback import _load_engine
+    from invoice_pipeline.ocr.orchestrator import OCROrchestrator
 
-    with patch("invoice_pipeline.stages.ocr_fallback.settings") as s:
+    with patch("invoice_pipeline.ocr.orchestrator.settings") as s:
         s.OCR_ENGINE = OCREngineName.TESSERACT
-        engine = _load_engine()
+        orchestrator = OCROrchestrator()
+        engine = orchestrator._get_engine_fallbacks()[0][1]
         assert isinstance(engine, TesseractEngine)
 
 
 def test_ocr_engine_paddle_import_error_falls_back_to_tesseract():
     from invoice_pipeline.config import OCREngineName
     from invoice_pipeline.ocr.tesseract import TesseractEngine
-    from invoice_pipeline.stages.ocr_fallback import _load_engine
+    from invoice_pipeline.ocr.orchestrator import OCROrchestrator
 
-    with patch("invoice_pipeline.stages.ocr_fallback.settings") as s:
+    with patch("invoice_pipeline.ocr.orchestrator.settings") as s:
         s.OCR_ENGINE = OCREngineName.PADDLEOCR
         # Simulate paddle module's internal import failing at instantiation time
         with patch(
-            "invoice_pipeline.ocr.paddle.PaddleOCREngine",
-            side_effect=ImportError("paddleocr not installed"),
+            "invoice_pipeline.ocr.paddle.PaddleOCREngine.__init__",
+            side_effect=ImportError("No module named 'paddle'"),
         ):
-            engine = _load_engine()
-            assert isinstance(engine, TesseractEngine)
+            orchestrator = OCROrchestrator()
+            engines = orchestrator._get_engine_fallbacks()
+            # If Paddle fails, tesseract is next
+            assert len(engines) > 0
+            assert isinstance(engines[0][1], TesseractEngine)
 
 
 # ── Email extraction ──────────────────────────────────────────────────────────
@@ -199,11 +203,9 @@ async def test_pipeline_image_via_ocr(mock_llm, db_session):
     from invoice_pipeline.schemas import Page
 
     png = (FIXTURES / "invoice_image.png").read_bytes()
-    mock_engine = AsyncMock()
-    mock_engine.extract_pages = AsyncMock(
-        return_value=[Page(page_num=0, text="Invoice Total: $1100.00 USD Vendor: Acme Corp")]
-    )
-    with patch("invoice_pipeline.stages.ocr_fallback._load_engine", return_value=mock_engine):
+    mock_orchestrator = AsyncMock()
+    mock_orchestrator.extract_pages.return_value = ([Page(page_num=0, text="Invoice Total: $1100.00 USD Vendor: Acme Corp")], [b"dummy"])
+    with patch("invoice_pipeline.stages.ocr_fallback.OCROrchestrator", return_value=mock_orchestrator):
         doc = await run_pipeline("invoice.png", png, "image/png", db_session)
 
     assert doc.document_id is not None

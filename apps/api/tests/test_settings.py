@@ -19,7 +19,10 @@ async def test_get_settings(settings_client: AsyncClient) -> None:
     data = res.json()
     assert "llm_provider" in data
     assert "lm_studio_model" in data
-    assert "openai_model" in data
+    assert "llamacpp_model" in data
+    # Phase 13: cloud provider config is browser-session-only, never exposed here.
+    assert "openai_model" not in data
+    assert "has_openai_key" not in data
 
 
 @pytest.mark.asyncio
@@ -131,8 +134,8 @@ async def test_llamacpp_models_online(settings_client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_update_settings_success(settings_client: AsyncClient) -> None:
     mock_provider = MagicMock()
-    mock_provider.provider_name = "openai"
-    mock_provider._model = "gpt-4o"
+    mock_provider.provider_name = "llamacpp"
+    mock_provider._model = "llama-local"
 
     with (
         patch("invoice_pipeline.api.routes.settings.save_runtime_overrides") as mock_save,
@@ -145,9 +148,7 @@ async def test_update_settings_success(settings_client: AsyncClient) -> None:
         res = await settings_client.patch(
             "/settings/",
             json={
-                "llm_provider": "openai",
-                "openai_model": "gpt-4o",
-                "openai_api_key": "test-key-123",
+                "llm_provider": "llamacpp",
                 "lm_studio_model": "qwen2",
                 "lm_studio_base_url": "http://other:1234",
                 "ollama_base_url": "http://other:11434",
@@ -164,9 +165,9 @@ async def test_update_settings_success(settings_client: AsyncClient) -> None:
     assert res.status_code == 200
     mock_save.assert_called_once()
     data = res.json()
-    assert data["llm_provider"] == "openai"
-    assert data["openai_model"] == "gpt-4o"
-    assert data["has_openai_key"] is True
+    assert data["llm_provider"] == "llamacpp"
+    assert data["llamacpp_model"] == "llama-local"
+    assert data["has_llamacpp_key"] is True
 
 
 @pytest.mark.asyncio
@@ -174,3 +175,36 @@ async def test_update_settings_invalid_provider(settings_client: AsyncClient) ->
     res = await settings_client.patch("/settings/", json={"llm_provider": "invalid-provider-name"})
     assert res.status_code == 400
     assert "Invalid provider" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_update_settings_empty_key_does_not_clobber_saved_key(
+    settings_client: AsyncClient,
+) -> None:
+    """Runtime priority (Part 6): a UI form can't echo back a saved secret, so it
+    re-submits an empty string for untouched key fields. That must never erase a
+    working key — only a non-empty value should override.
+
+    Cloud provider keys moved to browser-session-only (Phase 13) and are no
+    longer PATCH-able here, so this now exercises the one remaining
+    runtime-persisted key: LLAMACPP_API_KEY (local provider, dummy secret)."""
+    mock_provider = MagicMock()
+    mock_provider.provider_name = "llamacpp"
+    mock_provider._model = "local-model"
+
+    with (
+        patch("invoice_pipeline.api.routes.settings.save_runtime_overrides"),
+        patch(
+            "invoice_pipeline.llm.factory.create_provider",
+            new_callable=AsyncMock,
+            return_value=mock_provider,
+        ),
+    ):
+        res = await settings_client.patch(
+            "/settings/", json={"llamacpp_api_key": "real-local-key"}
+        )
+        assert res.json()["has_llamacpp_key"] is True
+
+        res = await settings_client.patch("/settings/", json={"llamacpp_api_key": ""})
+        assert res.status_code == 200
+        assert res.json()["has_llamacpp_key"] is True

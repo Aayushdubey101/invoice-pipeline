@@ -254,6 +254,73 @@ async def test_confidence_score_vendor_boost():
     assert scored.extracted.vendor_name.confidence > invoice.vendor_name.confidence
 
 
+# ── ground_fields: pipeline-wired bbox restoration (jump-to-source) ──────────
+# Regression guard for a bug found during the FINAL_ENGINEERING_AUDIT pass:
+# _apply_grounding computed bbox + hallucination-confidence-cap but was never
+# called by pipeline.py (ConfidenceEngine replaced it without carrying this
+# over). Renamed to apply_grounding + wrapped as ground_fields, wired into
+# pipeline.py right after field_extract. These tests exercise ground_fields
+# directly (the stage-level wrapper), not just the underlying helper.
+
+
+@pytest.mark.asyncio
+async def test_ground_fields_populates_bbox_for_grounded_value():
+    from invoice_pipeline.schemas import Page, Word
+    from invoice_pipeline.stages.confidence_score import ground_fields
+    from invoice_pipeline.stages.ingest import ingest
+
+    pdf = (FIXTURES / "sample_invoice.pdf").read_bytes()
+    doc = await ingest("test.pdf", pdf, "application/pdf")
+
+    invoice = _mock_invoice()
+    words = [
+        Word(text="Invoice", bbox=(0, 0, 50, 10)),
+        Word(text="INV-2024-001", bbox=(55, 0, 150, 10)),
+        Word(text="total", bbox=(155, 0, 200, 10)),
+    ]
+    doc = doc.model_copy(
+        update={
+            "extracted": invoice,
+            "pages": [Page(page_num=0, text="Invoice INV-2024-001 total", words=words)],
+            "raw_text": "Invoice INV-2024-001 total",
+        }
+    )
+
+    result = await ground_fields(doc)
+
+    # The sliding-window matcher unions bboxes of every word in the smallest
+    # matching chunk starting at word 0 — here that's ["Invoice", "INV-2024-001"]
+    # since the whitespace-stripped concatenation already contains the needle.
+    assert result.extracted.invoice_number.bbox == (0.0, 0.0, 150.0, 10.0)
+    assert result.extracted.invoice_number.page == 0
+    # confidence untouched — value is grounded in the OCR text
+    assert result.extracted.invoice_number.confidence == invoice.invoice_number.confidence
+
+
+@pytest.mark.asyncio
+async def test_ground_fields_caps_confidence_for_ungrounded_value():
+    from invoice_pipeline.stages.confidence_score import ground_fields
+    from invoice_pipeline.stages.ingest import ingest
+
+    pdf = (FIXTURES / "sample_invoice.pdf").read_bytes()
+    doc = await ingest("test.pdf", pdf, "application/pdf")
+
+    invoice = _mock_invoice().model_copy(
+        update={"vendor_name": FieldValue(value="Totally Different Ghost Vendor Inc", confidence=0.9)}
+    )
+    doc = doc.model_copy(
+        update={
+            "extracted": invoice,
+            "pages": [],
+            "raw_text": "This OCR text does not mention the vendor name at all.",
+        }
+    )
+
+    result = await ground_fields(doc)
+
+    assert result.extracted.vendor_name.confidence <= 0.5
+
+
 # ── Notify stage ──────────────────────────────────────────────────────────────
 
 

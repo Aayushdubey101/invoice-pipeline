@@ -3,6 +3,7 @@ Phase 6 tests — review, vendor, and invoice API routes.
 Uses SQLite in-memory DB + FastAPI dependency override for get_session.
 """
 
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -10,7 +11,16 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from invoice_pipeline.api.main import app
-from invoice_pipeline.db.models import AuditLog, Base, Document, Invoice, InvoiceField, Vendor
+from invoice_pipeline.db.models import (
+    AuditLog,
+    Base,
+    Document,
+    Invoice,
+    InvoiceField,
+    ReviewerFeedback,
+    Vendor,
+    Workspace,
+)
 from invoice_pipeline.db.session import get_session
 
 # ── DB fixture ────────────────────────────────────────────────────────────────
@@ -33,12 +43,25 @@ async def db_session(db_engine):
 
 
 @pytest.fixture
-async def client(db_session: AsyncSession):
+async def ws(db_session: AsyncSession) -> Workspace:
+    """A real guest workspace — every scoped route requires X-Workspace-Id now."""
+    w = Workspace(workspace_type="guest", expires_at=datetime.now(timezone.utc) + timedelta(hours=1))
+    db_session.add(w)
+    await db_session.commit()
+    return w
+
+
+@pytest.fixture
+async def client(db_session: AsyncSession, ws: Workspace):
     async def override_get_session():
         yield db_session
 
     app.dependency_overrides[get_session] = override_get_session
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-Workspace-Id": ws.id},
+    ) as ac:
         yield ac
     app.dependency_overrides.clear()
 
@@ -46,9 +69,10 @@ async def client(db_session: AsyncSession):
 # ── Seed helpers ──────────────────────────────────────────────────────────────
 
 
-async def seed_vendor(session: AsyncSession, **kwargs) -> Vendor:
+async def seed_vendor(session: AsyncSession, workspace_id: str, **kwargs) -> Vendor:
     v = Vendor(
         id=kwargs.get("id", "v-001"),
+        workspace_id=workspace_id,
         canonical_name=kwargs.get("canonical_name", "Acme Corp"),
         aliases=kwargs.get("aliases", ["ACME"]),
         status=kwargs.get("status", "active"),
@@ -60,11 +84,13 @@ async def seed_vendor(session: AsyncSession, **kwargs) -> Vendor:
 
 async def seed_doc_and_invoice(
     session: AsyncSession,
+    workspace_id: str,
     vendor_id: str | None = None,
     needs_review: bool = True,
 ) -> tuple[Document, Invoice]:
     doc = Document(
         id="d" * 64,
+        workspace_id=workspace_id,
         filename="invoice.pdf",
         mime_type="application/pdf",
         file_size_bytes=1024,
@@ -77,6 +103,7 @@ async def seed_doc_and_invoice(
 
     inv = Invoice(
         id="inv-001",
+        workspace_id=workspace_id,
         document_id=doc.id,
         vendor_id=vendor_id,
         invoice_number="INV-001",
@@ -123,10 +150,10 @@ async def test_review_queue_empty(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_review_queue_returns_pending_items(
-    client: AsyncClient, db_session: AsyncSession
+    client: AsyncClient, db_session: AsyncSession, ws: Workspace
 ) -> None:
-    vendor = await seed_vendor(db_session)
-    await seed_doc_and_invoice(db_session, vendor_id=vendor.id, needs_review=True)
+    vendor = await seed_vendor(db_session, ws.id)
+    await seed_doc_and_invoice(db_session, ws.id, vendor_id=vendor.id, needs_review=True)
 
     res = await client.get("/review/queue")
     assert res.status_code == 200
@@ -140,9 +167,9 @@ async def test_review_queue_returns_pending_items(
 
 @pytest.mark.asyncio
 async def test_review_queue_excludes_non_review_invoices(
-    client: AsyncClient, db_session: AsyncSession
+    client: AsyncClient, db_session: AsyncSession, ws: Workspace
 ) -> None:
-    await seed_doc_and_invoice(db_session, needs_review=False)
+    await seed_doc_and_invoice(db_session, ws.id, needs_review=False)
 
     res = await client.get("/review/queue")
     assert res.status_code == 200
@@ -153,8 +180,8 @@ async def test_review_queue_excludes_non_review_invoices(
 
 
 @pytest.mark.asyncio
-async def test_approve_invoice(client: AsyncClient, db_session: AsyncSession) -> None:
-    doc, inv = await seed_doc_and_invoice(db_session, needs_review=True)
+async def test_approve_invoice(client: AsyncClient, db_session: AsyncSession, ws: Workspace) -> None:
+    doc, inv = await seed_doc_and_invoice(db_session, ws.id, needs_review=True)
     await seed_field(db_session, inv.id)
 
     res = await client.post(f"/review/{inv.id}/approve")
@@ -175,10 +202,12 @@ async def test_approve_invoice_not_found(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_approve_writes_audit_log(client: AsyncClient, db_session: AsyncSession) -> None:
+async def test_approve_writes_audit_log(
+    client: AsyncClient, db_session: AsyncSession, ws: Workspace
+) -> None:
     from sqlalchemy import select
 
-    doc, inv = await seed_doc_and_invoice(db_session, needs_review=True)
+    doc, inv = await seed_doc_and_invoice(db_session, ws.id, needs_review=True)
 
     await client.post(f"/review/{inv.id}/approve")
 
@@ -194,8 +223,8 @@ async def test_approve_writes_audit_log(client: AsyncClient, db_session: AsyncSe
 
 
 @pytest.mark.asyncio
-async def test_reject_invoice(client: AsyncClient, db_session: AsyncSession) -> None:
-    doc, inv = await seed_doc_and_invoice(db_session, needs_review=True)
+async def test_reject_invoice(client: AsyncClient, db_session: AsyncSession, ws: Workspace) -> None:
+    doc, inv = await seed_doc_and_invoice(db_session, ws.id, needs_review=True)
 
     res = await client.post(f"/review/{inv.id}/reject")
     assert res.status_code == 200
@@ -215,8 +244,8 @@ async def test_reject_invoice_not_found(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_field(client: AsyncClient, db_session: AsyncSession) -> None:
-    doc, inv = await seed_doc_and_invoice(db_session)
+async def test_update_field(client: AsyncClient, db_session: AsyncSession, ws: Workspace) -> None:
+    doc, inv = await seed_doc_and_invoice(db_session, ws.id)
     field = await seed_field(db_session, inv.id)
 
     res = await client.patch(
@@ -233,8 +262,41 @@ async def test_update_field(client: AsyncClient, db_session: AsyncSession) -> No
 
 
 @pytest.mark.asyncio
-async def test_update_field_null_value(client: AsyncClient, db_session: AsyncSession) -> None:
-    doc, inv = await seed_doc_and_invoice(db_session)
+async def test_update_field_creates_reviewer_feedback(
+    client: AsyncClient, db_session: AsyncSession, ws: Workspace
+) -> None:
+    from sqlalchemy import select
+
+    doc, inv = await seed_doc_and_invoice(db_session, ws.id)
+    field = await seed_field(db_session, inv.id)
+
+    res = await client.patch(
+        f"/review/{inv.id}/field/{field.id}",
+        json={
+            "reviewed_value": "INV-CORRECTED",
+            "correction_reason": "OCR missed a character"
+        },
+    )
+    assert res.status_code == 200
+
+    result = await db_session.execute(select(ReviewerFeedback).where(ReviewerFeedback.document_id == doc.id))
+    feedbacks = result.scalars().all()
+    assert len(feedbacks) == 1
+    
+    fb = feedbacks[0]
+    assert fb.field_type == field.field_name
+    assert fb.original_value == field.canonical_value
+    assert fb.corrected_value == "INV-CORRECTED"
+    assert fb.correction_reason == "OCR missed a character"
+    assert fb.invoice_type == doc.doc_type
+    assert float(fb.confidence) == pytest.approx(field.confidence)
+
+
+@pytest.mark.asyncio
+async def test_update_field_null_value(
+    client: AsyncClient, db_session: AsyncSession, ws: Workspace
+) -> None:
+    doc, inv = await seed_doc_and_invoice(db_session, ws.id)
     field = await seed_field(db_session, inv.id)
 
     res = await client.patch(
@@ -246,8 +308,10 @@ async def test_update_field_null_value(client: AsyncClient, db_session: AsyncSes
 
 
 @pytest.mark.asyncio
-async def test_update_field_not_found(client: AsyncClient, db_session: AsyncSession) -> None:
-    doc, inv = await seed_doc_and_invoice(db_session)
+async def test_update_field_not_found(
+    client: AsyncClient, db_session: AsyncSession, ws: Workspace
+) -> None:
+    doc, inv = await seed_doc_and_invoice(db_session, ws.id)
 
     res = await client.patch(
         f"/review/{inv.id}/field/nonexistent",
@@ -257,8 +321,10 @@ async def test_update_field_not_found(client: AsyncClient, db_session: AsyncSess
 
 
 @pytest.mark.asyncio
-async def test_update_field_wrong_invoice(client: AsyncClient, db_session: AsyncSession) -> None:
-    doc, inv = await seed_doc_and_invoice(db_session)
+async def test_update_field_wrong_invoice(
+    client: AsyncClient, db_session: AsyncSession, ws: Workspace
+) -> None:
+    doc, inv = await seed_doc_and_invoice(db_session, ws.id)
     field = await seed_field(db_session, inv.id)
 
     res = await client.patch(
@@ -281,9 +347,9 @@ async def test_list_vendors_empty(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_vendors(client: AsyncClient, db_session: AsyncSession) -> None:
-    await seed_vendor(db_session, id="v1", canonical_name="Acme Corp", aliases=["ACME"])
-    await seed_vendor(db_session, id="v2", canonical_name="Beta Inc", aliases=[])
+async def test_list_vendors(client: AsyncClient, db_session: AsyncSession, ws: Workspace) -> None:
+    await seed_vendor(db_session, ws.id, id="v1", canonical_name="Acme Corp", aliases=["ACME"])
+    await seed_vendor(db_session, ws.id, id="v2", canonical_name="Beta Inc", aliases=[])
 
     res = await client.get("/vendors/")
     assert res.status_code == 200
@@ -295,8 +361,10 @@ async def test_list_vendors(client: AsyncClient, db_session: AsyncSession) -> No
 
 
 @pytest.mark.asyncio
-async def test_update_vendor_canonical_name(client: AsyncClient, db_session: AsyncSession) -> None:
-    vendor = await seed_vendor(db_session)
+async def test_update_vendor_canonical_name(
+    client: AsyncClient, db_session: AsyncSession, ws: Workspace
+) -> None:
+    vendor = await seed_vendor(db_session, ws.id)
 
     res = await client.patch(f"/vendors/{vendor.id}", json={"canonical_name": "ACME Corporation"})
     assert res.status_code == 200
@@ -308,8 +376,10 @@ async def test_update_vendor_canonical_name(client: AsyncClient, db_session: Asy
 
 
 @pytest.mark.asyncio
-async def test_update_vendor_aliases(client: AsyncClient, db_session: AsyncSession) -> None:
-    vendor = await seed_vendor(db_session)
+async def test_update_vendor_aliases(
+    client: AsyncClient, db_session: AsyncSession, ws: Workspace
+) -> None:
+    vendor = await seed_vendor(db_session, ws.id)
 
     res = await client.patch(f"/vendors/{vendor.id}", json={"aliases": ["Acme", "ACME Corp"]})
     assert res.status_code == 200
@@ -328,9 +398,9 @@ async def test_update_vendor_not_found(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_invoice(client: AsyncClient, db_session: AsyncSession) -> None:
-    vendor = await seed_vendor(db_session)
-    doc, inv = await seed_doc_and_invoice(db_session, vendor_id=vendor.id)
+async def test_get_invoice(client: AsyncClient, db_session: AsyncSession, ws: Workspace) -> None:
+    vendor = await seed_vendor(db_session, ws.id)
+    doc, inv = await seed_doc_and_invoice(db_session, ws.id, vendor_id=vendor.id)
     await seed_field(db_session, inv.id)
 
     res = await client.get(f"/invoices/{inv.id}")
@@ -353,9 +423,9 @@ async def test_get_invoice_not_found(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_get_invoice_fields_have_confidence(
-    client: AsyncClient, db_session: AsyncSession
+    client: AsyncClient, db_session: AsyncSession, ws: Workspace
 ) -> None:
-    doc, inv = await seed_doc_and_invoice(db_session)
+    doc, inv = await seed_doc_and_invoice(db_session, ws.id)
     await seed_field(db_session, inv.id, confidence=0.72)
 
     res = await client.get(f"/invoices/{inv.id}")
