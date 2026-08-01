@@ -4,8 +4,8 @@ services:
     runtime: docker
     plan: free
     rootDir: apps/api
-    dockerfilePath: apps/api/Dockerfile
-    dockerContext: apps/api
+    dockerfilePath: Dockerfile
+    dockerContext: .
     healthCheckPath: /health
     envVars:
       - key: APP_ENV
@@ -46,8 +46,8 @@ services:
     runtime: docker
     plan: free
     rootDir: apps/web
-    dockerfilePath: apps/web/Dockerfile
-    dockerContext: apps/web
+    dockerfilePath: Dockerfile
+    dockerContext: .
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://invoice-pipeline-api.onrender.com
