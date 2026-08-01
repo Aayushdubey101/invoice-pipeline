@@ -79,38 +79,48 @@ async def seed() -> None:
 
     await engine.dispose()
 
-    # Seed Chroma embeddings (optional — skips if ml group not installed)
-    await _seed_chroma()
+    # Seed Qdrant embeddings (optional — skips if ml group not installed)
+    await _seed_qdrant()
 
 
-async def _seed_chroma() -> None:
+async def _seed_qdrant() -> None:
     try:
-        import chromadb
+        from qdrant_client.http import models
         from sentence_transformers import SentenceTransformer
 
+        from invoice_pipeline.canonicalizers.qdrant_client import ensure_qdrant_collection, get_qdrant_client
         from invoice_pipeline.config import settings
+        from invoice_pipeline.db.models import LEGACY_WORKSPACE_ID
 
-        client = chromadb.HttpClient(host=settings.CHROMA_HOST, port=settings.CHROMA_PORT)
-        collection = client.get_or_create_collection(settings.CHROMA_VENDOR_COLLECTION)
+        await ensure_qdrant_collection()
+        client = get_qdrant_client()
         model = SentenceTransformer("all-MiniLM-L6-v2")
 
         for v in _SEED_VENDORS:
             name = v["canonical_name"]
             vendor_id = str(uuid.uuid4())  # placeholder; real seed would use DB id
             embedding = model.encode(name).tolist()
-            collection.upsert(
-                ids=[vendor_id],
-                embeddings=[embedding],
-                documents=[name],
-                metadatas=[{"canonical_name": name}],
+            
+            await client.upsert(
+                collection_name=settings.QDRANT_VENDOR_COLLECTION,
+                points=[
+                    models.PointStruct(
+                        id=vendor_id,
+                        vector=embedding,
+                        payload={
+                            "canonical_name": name,
+                            "workspace_id": LEGACY_WORKSPACE_ID,
+                        },
+                    )
+                ],
             )
-            log.info("vendor_chroma_seeded", name=name)
+            log.info("vendor_qdrant_seeded", name=name)
 
-        log.info("chroma_seed_complete", count=len(_SEED_VENDORS))
+        log.info("qdrant_seed_complete", count=len(_SEED_VENDORS))
     except ImportError:
-        log.info("chroma_seed_skipped", reason="ml group not installed")
+        log.info("qdrant_seed_skipped", reason="ml group not installed")
     except Exception as exc:
-        log.warning("chroma_seed_failed", error=str(exc))
+        log.warning("qdrant_seed_failed", error=str(exc))
 
 
 if __name__ == "__main__":

@@ -5,7 +5,9 @@ from invoice_pipeline.canonicalizers.currency import normalize_currency, parse_a
 from invoice_pipeline.canonicalizers.dates import parse_date
 from invoice_pipeline.canonicalizers.tax_ids import validate_tax_id
 from invoice_pipeline.canonicalizers.vendors import match_or_create_vendor
+from invoice_pipeline.db import models
 from invoice_pipeline.schemas import CanonicalizedInvoice, Document, PipelineError
+from invoice_pipeline.vendor_intelligence.booster import apply_vendor_intelligence
 
 log = structlog.get_logger()
 
@@ -26,8 +28,19 @@ async def canonicalize(doc: Document, session: AsyncSession) -> Document:
 
         vendor_id = None
         vendor_matched = False
+        intelligence_reasons: list[str] = []
         if inv.vendor_name.value:
-            vendor_id, vendor_matched = await match_or_create_vendor(inv.vendor_name.value, session)
+            vendor_id, vendor_matched = await match_or_create_vendor(
+                inv.vendor_name.value, session, doc.workspace_id
+            )
+
+        # Phase 5: Apply vendor intelligence boosts if we matched a known vendor
+        if vendor_id and vendor_matched:
+            vendor_row = await session.get(models.Vendor, vendor_id)
+            if vendor_row is not None:
+                doc, intelligence_reasons = apply_vendor_intelligence(doc, vendor_row)
+                # Reload inv after potential modifications
+                inv = doc.extracted  # type: ignore[assignment]
 
         canon = CanonicalizedInvoice(
             invoice_number=inv.invoice_number.value,
@@ -43,6 +56,14 @@ async def canonicalize(doc: Document, session: AsyncSession) -> Document:
             purchase_order=inv.purchase_order.value,
             raw=inv,
         )
+
+        if intelligence_reasons:
+            canon = canon.model_copy(
+                update={
+                    "needs_review": True,
+                    "review_reasons": list(canon.review_reasons) + intelligence_reasons,
+                }
+            )
 
         log.info(
             "pipeline_stage",

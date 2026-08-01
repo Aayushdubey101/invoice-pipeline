@@ -1,8 +1,29 @@
+from __future__ import annotations
+
 from datetime import date
 from decimal import Decimal
 from enum import Enum
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
+
+from invoice_pipeline.db.models import LEGACY_WORKSPACE_ID
+
+if TYPE_CHECKING:
+    pass
+
+
+class RowType(str, Enum):
+    """Semantic row classification for line items."""
+
+    ITEM = "item"           # Normal product / service line
+    DISCOUNT = "discount"   # Discount row (negative amount)
+    TAX = "tax"             # Tax row within table
+    SUBTOTAL = "subtotal"   # Subtotal row
+    TOTAL = "total"         # Grand total row inside table
+    SHIPPING = "shipping"   # Shipping / freight row
+    HEADER = "header"       # Continuation header (multi-page)
+    UNKNOWN = "unknown"
 
 
 class DocumentStatus(str, Enum):
@@ -34,13 +55,41 @@ class FieldValue(BaseModel):
     value: str | None = None
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     evidence: str | None = None  # verbatim source snippet
+    page: int | None = None
+    bbox: tuple[float, float, float, float] | None = None  # (x0, y0, x1, y1)
+
+
+class CellValue(BaseModel):
+    """Rich field value with spatial provenance metadata."""
+
+    value: str | None = None
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidence: str | None = None     # verbatim source snippet
+    page: int | None = None          # 0-indexed page number
+    bbox: tuple[float, float, float, float] | None = None  # (x0, y0, x1, y1)
+    source_evidence: str | None = None  # broader context block from OCR/text
 
 
 class LineItem(BaseModel):
+    """LLM extraction target for line items — each cell is a FieldValue."""
+
     description: FieldValue = Field(default_factory=FieldValue)
     quantity: FieldValue = Field(default_factory=FieldValue)
     unit_price: FieldValue = Field(default_factory=FieldValue)
     total: FieldValue = Field(default_factory=FieldValue)
+
+
+class RichLineItem(BaseModel):
+    """Phase-4 rich line item with per-cell spatial metadata and row classification."""
+
+    description: CellValue = Field(default_factory=CellValue)
+    quantity: CellValue = Field(default_factory=CellValue)
+    unit_price: CellValue = Field(default_factory=CellValue)
+    total: CellValue = Field(default_factory=CellValue)
+    row_type: RowType = RowType.ITEM
+    math_valid: bool | None = None   # qty * unit_price ≈ total?
+    page: int | None = None          # primary page this row appears on
+    table_index: int = 0             # which table on the page (0-indexed)
 
 
 class Invoice(BaseModel):
@@ -61,6 +110,7 @@ class Invoice(BaseModel):
     payment_terms: FieldValue = Field(default_factory=FieldValue)
     purchase_order: FieldValue = Field(default_factory=FieldValue)
     line_items: list[LineItem] = Field(default_factory=list)
+    rich_line_items: list[RichLineItem] = Field(default_factory=list)
 
 
 # ── Canonicalized output ──────────────────────────────────────────────────────
@@ -90,6 +140,7 @@ class Word(BaseModel):
     text: str
     bbox: tuple[float, float, float, float] | None = None
     page: int = 0
+    confidence: float = 1.0
 
 
 class Page(BaseModel):
@@ -106,7 +157,8 @@ class PipelineError(BaseModel):
 
 
 class Document(BaseModel):
-    document_id: str  # SHA256 hex
+    document_id: str  # SHA256 hex, salted with workspace_id
+    workspace_id: str = LEGACY_WORKSPACE_ID
     filename: str
     mime_type: str
     file_bytes: bytes = Field(default=b"", exclude=True)
@@ -119,6 +171,8 @@ class Document(BaseModel):
     status: DocumentStatus = DocumentStatus.PENDING
     parent_document_id: str | None = None  # for email attachments
     vendor_matched: bool = False
+    validation_report: dict[str, Any] | None = None  # ValidationReport.model_dump()
+    confidence_breakdown: dict[str, Any] | None = None  # ConfidenceBreakdown.model_dump_summary()
 
 
 # ── API response schemas ──────────────────────────────────────────────────────

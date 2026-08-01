@@ -1,19 +1,20 @@
 import structlog
 
-from invoice_pipeline.llm.factory import get_provider
+from invoice_pipeline.llm.factory import create_provider, get_provider
+from invoice_pipeline.llm.override import ProviderOverride
 from invoice_pipeline.llm.prompts import EXTRACTION_SYSTEM_PROMPT
 from invoice_pipeline.schemas import Document, DocumentStatus, Invoice, PipelineError
 
 log = structlog.get_logger()
 
 
-async def field_extract(doc: Document) -> Document:
+async def field_extract(doc: Document, override: ProviderOverride | None = None) -> Document:
     if not doc.raw_text.strip():
         error = PipelineError(stage="field_extract", message="No text to extract from")
         return doc.model_copy(update={"errors": [*doc.errors, error]})
 
     try:
-        provider = await get_provider()
+        provider = await create_provider(override) if override else await get_provider()
         result, meta = await provider.extract(
             text=doc.raw_text,
             schema=Invoice,
