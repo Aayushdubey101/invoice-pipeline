@@ -1,6 +1,5 @@
 import hashlib
 import mimetypes
-from pathlib import Path
 from typing import Any
 
 import structlog
@@ -10,27 +9,35 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from invoice_pipeline.api.deps import get_current_workspace
+from invoice_pipeline.api.limiter import limiter
 from invoice_pipeline.api.metrics import UPLOAD_ERRORS_TOTAL, UPLOADS_TOTAL
+from invoice_pipeline.config import settings
 from invoice_pipeline.db import models
+from invoice_pipeline.db.models import Workspace
 from invoice_pipeline.db.session import get_session
+from invoice_pipeline.llm.override import parse_provider_override
 from invoice_pipeline.pipeline import run_pipeline
+from invoice_pipeline.utils.storage import upload_dir
 
 log = structlog.get_logger()
 router = APIRouter()
 
-_MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
-
 
 @router.post("/upload", status_code=202)
+@limiter.limit("20/minute")
 async def upload_document(
     request: Request,
     file: UploadFile,
     force_reprocess: bool = Query(False),
     session: AsyncSession = Depends(get_session),
+    workspace: Workspace = Depends(get_current_workspace),
 ) -> dict[str, Any]:
     file_bytes = await file.read()
-    if len(file_bytes) > _MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail="File exceeds 50 MB limit")
+    if len(file_bytes) > settings.max_upload_bytes:
+        raise HTTPException(
+            status_code=413, detail=f"File exceeds {settings.MAX_UPLOAD_SIZE_MB} MB limit"
+        )
 
     mime_type = (
         file.content_type
@@ -39,7 +46,7 @@ async def upload_document(
     )
     filename = file.filename or "upload"
 
-    doc_id = hashlib.sha256(file_bytes).hexdigest()
+    doc_id = hashlib.sha256(file_bytes + workspace.id.encode()).hexdigest()
     existing = await session.get(models.Document, doc_id)
     already_clean = (
         existing is not None
@@ -54,6 +61,8 @@ async def upload_document(
             "errors": existing.errors,
         }
 
+    llm_override = parse_provider_override(request, workspace)
+
     UPLOADS_TOTAL.inc()
     try:
         doc = await run_pipeline(
@@ -61,12 +70,12 @@ async def upload_document(
             file_bytes=file_bytes,
             mime_type=mime_type,
             session=session,
+            llm_override=llm_override,
+            workspace_id=workspace.id,
         )
 
         # Save file bytes to disk so they can be retrieved by the frontend via /documents/{id}/file
-        upload_dir = Path(__file__).resolve().parents[4] / "data" / "uploads"
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        file_path = upload_dir / doc.document_id
+        file_path = upload_dir(workspace.id) / doc.document_id
         with open(file_path, "wb") as f:
             f.write(file_bytes)
 
@@ -88,13 +97,13 @@ async def upload_document(
 async def get_document_file(
     document_id: str,
     session: AsyncSession = Depends(get_session),
+    workspace: Workspace = Depends(get_current_workspace),
 ) -> FileResponse:
     db_doc = await session.get(models.Document, document_id)
-    if db_doc is None:
+    if db_doc is None or db_doc.workspace_id != workspace.id:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    upload_dir = Path(__file__).resolve().parents[4] / "data" / "uploads"
-    file_path = upload_dir / document_id
+    file_path = upload_dir(workspace.id) / document_id
 
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File content not found on disk")
@@ -110,11 +119,12 @@ async def get_document_file(
 async def get_document(
     document_id: str,
     session: AsyncSession = Depends(get_session),
+    workspace: Workspace = Depends(get_current_workspace),
 ) -> dict[str, Any]:
     stmt = (
         select(models.Document)
         .options(selectinload(models.Document.invoice))
-        .where(models.Document.id == document_id)
+        .where(models.Document.id == document_id, models.Document.workspace_id == workspace.id)
     )
     db_doc = (await session.execute(stmt)).scalar_one_or_none()
     if db_doc is None:

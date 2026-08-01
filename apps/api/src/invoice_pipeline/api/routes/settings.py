@@ -1,9 +1,10 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from httpx import AsyncClient
 from pydantic import BaseModel
 
+from invoice_pipeline.api.limiter import limiter
 from invoice_pipeline.config import (
     LLMProviderName,
     save_runtime_overrides,
@@ -18,12 +19,6 @@ class SettingsUpdate(BaseModel):
     llm_provider: str | None = None
     lm_studio_model: str | None = None
     lm_studio_base_url: str | None = None
-    openai_api_key: str | None = None
-    openai_model: str | None = None
-    anthropic_api_key: str | None = None
-    anthropic_model: str | None = None
-    gemini_api_key: str | None = None
-    gemini_model: str | None = None
     llamacpp_base_url: str | None = None
     llamacpp_model: str | None = None
     llamacpp_api_key: str | None = None
@@ -78,18 +73,42 @@ async def llamacpp_models(base_url: str | None = None) -> dict[str, Any]:
     return await list_models(base_url)
 
 
+@router.post("/test-connection")
+@limiter.limit("20/minute")
+async def test_connection(
+    request: Request,
+    provider: str,
+    base_url: str | None = None,
+) -> dict[str, Any]:
+    """Live-check a *local* provider (ollama/lm_studio/llamacpp) using either
+    the value passed in (unsaved draft) or the currently effective settings
+    value if none is given.
+
+    Phase 13: cloud providers (openai/anthropic/gemini/groq) moved to
+    POST /providers/test — a browser-session key is never sent to or checked
+    against this backend-config route. This route stays for local providers
+    only, which already have dedicated endpoints too but keep this one for
+    existing callers.
+    """
+    if provider == "ollama":
+        return await get_ollama_models(base_url)
+    if provider == "lm_studio":
+        return await get_lm_studio_models(base_url)
+    if provider == "llamacpp":
+        from invoice_pipeline.llm.llamacpp_client import health_check
+
+        result = await health_check(base_url)
+        return {"online": result.get("online", False), **result}
+
+    raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+
+
 @router.get("/")
 async def get_settings() -> dict[str, Any]:
     return {
         "llm_provider": settings.LLM_PROVIDER.value,
         "lm_studio_model": settings.LM_STUDIO_MODEL,
         "lm_studio_base_url": settings.LM_STUDIO_BASE_URL,
-        "openai_model": settings.OPENAI_MODEL,
-        "anthropic_model": settings.ANTHROPIC_MODEL,
-        "gemini_model": settings.GEMINI_MODEL,
-        "has_openai_key": bool(settings.OPENAI_API_KEY),
-        "has_anthropic_key": bool(settings.ANTHROPIC_API_KEY),
-        "has_gemini_key": bool(settings.GEMINI_API_KEY),
         "llamacpp_base_url": settings.LLAMACPP_BASE_URL,
         "llamacpp_model": settings.LLAMACPP_MODEL,
         "has_llamacpp_key": bool(
@@ -104,7 +123,8 @@ async def get_settings() -> dict[str, Any]:
 
 
 @router.patch("/")
-async def update_settings(body: SettingsUpdate) -> dict[str, Any]:
+@limiter.limit("10/minute")
+async def update_settings(request: Request, body: SettingsUpdate) -> dict[str, Any]:
     if body.llm_provider is not None:
         try:
             settings.LLM_PROVIDER = LLMProviderName(body.llm_provider)
@@ -116,26 +136,11 @@ async def update_settings(body: SettingsUpdate) -> dict[str, Any]:
     if body.lm_studio_base_url is not None:
         settings.LM_STUDIO_BASE_URL = body.lm_studio_base_url
 
-    if body.openai_api_key is not None:
-        settings.OPENAI_API_KEY = body.openai_api_key
-    if body.openai_model is not None:
-        settings.OPENAI_MODEL = body.openai_model
-
-    if body.anthropic_api_key is not None:
-        settings.ANTHROPIC_API_KEY = body.anthropic_api_key
-    if body.anthropic_model is not None:
-        settings.ANTHROPIC_MODEL = body.anthropic_model
-
-    if body.gemini_api_key is not None:
-        settings.GEMINI_API_KEY = body.gemini_api_key
-    if body.gemini_model is not None:
-        settings.GEMINI_MODEL = body.gemini_model
-
     if body.llamacpp_base_url is not None:
         settings.LLAMACPP_BASE_URL = body.llamacpp_base_url
     if body.llamacpp_model is not None:
         settings.LLAMACPP_MODEL = body.llamacpp_model
-    if body.llamacpp_api_key is not None:
+    if body.llamacpp_api_key:
         settings.LLAMACPP_API_KEY = body.llamacpp_api_key
     if body.llamacpp_context_length is not None:
         settings.LLAMACPP_CONTEXT_LENGTH = body.llamacpp_context_length

@@ -5,7 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from invoice_pipeline.api.deps import get_current_workspace
 from invoice_pipeline.db import models
+from invoice_pipeline.db.models import Workspace
 from invoice_pipeline.db.session import get_session
 
 router = APIRouter()
@@ -15,10 +17,11 @@ router = APIRouter()
 async def get_invoice(
     invoice_id: str,
     session: AsyncSession = Depends(get_session),
+    workspace: Workspace = Depends(get_current_workspace),
 ) -> dict[str, Any]:
     result = await session.execute(
         select(models.Invoice)
-        .where(models.Invoice.id == invoice_id)
+        .where(models.Invoice.id == invoice_id, models.Invoice.workspace_id == workspace.id)
         .options(
             selectinload(models.Invoice.fields),
             selectinload(models.Invoice.line_items),
@@ -57,6 +60,8 @@ async def get_invoice(
                 "canonical_value": f.canonical_value,
                 "confidence": float(f.confidence),
                 "evidence": f.evidence,
+                "page": f.page,
+                "bbox": f.bbox,
                 "needs_review": f.needs_review,
                 "reviewed": f.reviewed,
                 "reviewed_value": f.reviewed_value,
@@ -71,8 +76,19 @@ async def get_invoice(
                 "quantity": li.quantity_raw,
                 "unit_price": li.unit_price_raw,
                 "total": li.total_raw,
+                "description_confidence": float(li.description_confidence),
+                "quantity_confidence": float(li.quantity_confidence),
+                "unit_price_confidence": float(li.unit_price_confidence),
+                "total_confidence": float(li.total_confidence),
+                "row_type": li.row_type,
+                "math_valid": li.math_valid,
+                "page": li.page,
+                "bbox": li.bbox,
+                "source_evidence": li.source_evidence,
+                "table_index": li.table_index,
             }
             for li in sorted(inv.line_items, key=lambda x: x.position)
         ],
         "raw_extraction": inv.raw_extraction,
+        "confidence_breakdown": inv.confidence_breakdown,
     }
