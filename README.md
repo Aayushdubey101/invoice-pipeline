@@ -10,7 +10,7 @@ Extract, canonicalize, and human-review structured data from any invoice — PDF
 git clone https://github.com/Aayushdubey101/invoice-pipeline
 cd invoice-pipeline
 cp .env.example .env          # pick your LLM provider
-docker compose up -d          # starts postgres, chroma, api, web
+docker compose up -d          # starts postgres, qdrant, api, web
 ./scripts/seed.sh             # loads 12 sample invoices + vendor master
 open http://localhost:3000    # review UI is live
 ```
@@ -19,10 +19,11 @@ open http://localhost:3000    # review UI is live
 
 ## Features
 
-- **Multi-provider LLM** — LM Studio (local), OpenAI, Anthropic, Gemini with auto-detection
+- **Multi-provider LLM** — Ollama/LM Studio/llama.cpp (local), OpenAI, Anthropic, Gemini, Groq with auto-detection
+- **Hybrid Authentication** — Zero-retention Guest Mode for quick, privacy-first testing (with randomized preview data on locked pages), or persistent Authenticated accounts via Clerk for long-term project management
 - **Any input format** — text PDFs (pdfplumber), scanned PDFs + images (PaddleOCR/Tesseract), email with attachments (unstructured)
 - **Per-field confidence scoring** — LLM self-reported + heuristic boosts (date parseable, math checks out, vendor matched)
-- **Vendor canonicalization** — fuzzy match (rapidfuzz ≥ 90) → vector embeddings (sentence-transformers + ChromaDB cosine ≥ 0.85) → new vendor flow
+- **Vendor canonicalization** — fuzzy match (rapidfuzz ≥ 90) → vector embeddings (sentence-transformers + Qdrant cosine ≥ 0.85) → new vendor flow
 - **Human-in-the-loop review UI** — PDF viewer side-by-side with editable fields; yellow highlights for low-confidence fields
 - **Idempotent uploads** — SHA256 deduplication; re-uploading the same file returns the cached result
 - **Full audit trail** — immutable `audit_log` rows for every state transition
@@ -117,6 +118,16 @@ GEMINI_MODEL=gemini-2.0-flash
 
 Get a key at [aistudio.google.com](https://aistudio.google.com).
 
+### Groq
+
+```ini
+LLM_PROVIDER=groq
+GROQ_API_KEY=gsk_...
+GROQ_MODEL=llama-3.3-70b-versatile
+```
+
+Get a key at [console.groq.com](https://console.groq.com).
+
 ---
 
 ## Architecture
@@ -142,7 +153,7 @@ graph TB
 
     subgraph Storage
         DB --> PG[(PostgreSQL)]
-        CAN --> CH[(ChromaDB\nvendor embeddings)]
+        CAN --> QD[(Qdrant\nvendor embeddings)]
     end
 
     subgraph UI["Review UI (apps/web)"]
@@ -164,8 +175,9 @@ graph TB
 | Decision | Choice | Reason |
 |----------|--------|--------|
 | LLM client | `instructor` | Schema-constrained output for all 4 providers via one API |
+| Authentication | Clerk + Guest Mode | Allows frictionless onboarding (guest) while supporting persistent enterprise workspaces |
 | Money types | `decimal.Decimal` | Avoid float precision loss in financial data |
-| Vendor matching | rapidfuzz → Chroma embeddings | Fast exact/fuzzy first, expensive embeddings only on miss |
+| Vendor matching | rapidfuzz → Qdrant | Fast exact/fuzzy first, robust scalable vector embeddings via Qdrant |
 | Pipeline errors | `document.errors[]` not raise | Partial extraction beats total failure |
 | Document ID | SHA256 of file bytes | Natural deduplication key, no database round-trip |
 | Audit log | Immutable INSERT only | Compliance requirement — no UPDATE/DELETE |
@@ -237,11 +249,11 @@ cd apps/api && uv run python scripts/seed_vendors.py
 |----------|---------|-------------|
 | `APP_ENV` | `development` | Environment name |
 | `DEBUG` | `false` | Enable debug responses |
-| `DATABASE_URL` | postgres://... | Async PostgreSQL URL |
-| `DATABASE_URL_SYNC` | postgres://... | Sync URL for Alembic |
-| `CHROMA_HOST` | `localhost` | ChromaDB host |
-| `CHROMA_PORT` | `8001` | ChromaDB port |
-| `LLM_PROVIDER` | `auto` | `auto` \| `lm_studio` \| `openai` \| `anthropic` \| `gemini` |
+| `DATABASE_URL` | postgres://... | Async PostgreSQL URL (asyncpg driver) — point at Neon in prod with `?ssl=require` |
+| `QDRANT_HOST` / `QDRANT_PORT` | `localhost` / `6333` | Local/self-hosted Qdrant |
+| `QDRANT_URL` | — | Qdrant Cloud cluster URL — takes priority over host/port when set |
+| `QDRANT_API_KEY` | — | Qdrant Cloud API key |
+| `LLM_PROVIDER` | `auto` | `auto` \| `ollama` \| `lm_studio` \| `llamacpp` \| `openai` \| `anthropic` \| `gemini` \| `groq` |
 | `LM_STUDIO_BASE_URL` | `http://localhost:1234/v1` | LM Studio endpoint |
 | `LM_STUDIO_MODEL` | `qwen2.5-7b-instruct` | Model name in LM Studio |
 | `OPENAI_API_KEY` | — | OpenAI API key |
@@ -250,13 +262,82 @@ cd apps/api && uv run python scripts/seed_vendors.py
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-5` | Anthropic model |
 | `GEMINI_API_KEY` | — | Google Gemini API key |
 | `GEMINI_MODEL` | `gemini-2.0-flash` | Gemini model |
+| `GROQ_API_KEY` | — | Groq API key |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model |
 | `LLM_TEMPERATURE` | `0.0` | Generation temperature |
 | `LLM_MAX_RETRIES` | `2` | Retry count on LLM failure |
-| `OCR_ENGINE` | `paddleocr` | `paddleocr` \| `tesseract` |
+| `OCR_ENGINE` | `tesseract` | `paddleocr` \| `tesseract` |
 | `LOW_CONFIDENCE_THRESHOLD` | `0.75` | Fields below this get `needs_review=true` |
 | `MAX_UPLOAD_SIZE_MB` | `25` | Max file upload size |
 | `REVIEW_WEBHOOK_URL` | — | POST target when invoice needs review |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins |
+| `EMAIL_IMPORT_ENABLED` | `false` | Enable the optional IMAP email connector (see below) |
+| `EMAIL_CONNECT_TIMEOUT_SECONDS` | `15` | IMAP connection timeout |
+| `CLERK_SECRET_KEY` / `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | — | Clerk auth keys |
+| `CLERK_JWKS_URL` / `CLERK_ISSUER` / `CLERK_AUDIENCE` | — | Clerk JWT verification |
+
+---
+
+## Optional: Email Import (IMAP)
+
+Disabled by default — the pipeline is fully functional without it, and nothing
+in the app imports or starts this module unless you call it yourself. Set
+`EMAIL_IMPORT_ENABLED=true` in `.env`, then invoke it from a script or scheduled
+job of your choosing (no automatic poller is included):
+
+```python
+from invoice_pipeline.email_connector.connector import EmailConnector
+
+conn = EmailConnector(host="imap.gmail.com", port=993, username="me@gmail.com", password="app-password")
+conn.connect()
+for att in conn.fetch_unread_attachments():
+    doc = await run_pipeline(
+        filename=att["filename"], file_bytes=att["file_bytes"],
+        mime_type=att["mime_type"], session=session,
+    )
+conn.disconnect()
+```
+
+Supported providers: Gmail (`imap.gmail.com:993`), Outlook (`outlook.office365.com:993`), or any generic
+IMAP host. Attachments are de-duplicated by SHA-256 hash within a single `fetch_unread_attachments()` call;
+across calls, dedup relies on the IMAP server's own `\Seen` flag (already-fetched messages won't be
+re-returned by the `UNSEEN` search). No mandatory dependency is added — it's stdlib `imaplib` only.
+
+**Known limitation:** there is no built-in scheduler/poller and no cross-restart durable dedup store — this
+is a connector you wire into your own cron/worker, not a turnkey background feature.
+
+---
+
+## Production Deployment
+
+Both Dockerfiles are non-root (`appuser`/`nextjs`) and carry a `HEALTHCHECK` hitting `/health`
+(api) and `/` (web). `docker-compose.yml` is dev-oriented (host-exposed Postgres/Chroma ports,
+default `invoice:invoice` DB creds, `host.docker.internal` LLM endpoints). For production, layer
+`docker-compose.prod.yml` on top:
+
+```bash
+export POSTGRES_USER=... POSTGRES_PASSWORD=... POSTGRES_DB=...
+export CORS_ORIGINS='["https://your-domain.com"]'
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+This override:
+- Requires `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`/`CORS_ORIGINS` to be set — refuses to
+  start with the dev defaults instead of silently using them.
+- Removes host port publishing for `postgres` and `qdrant` (api/web reach them over the internal
+  compose network only).
+- Adds `restart: unless-stopped` to every service.
+
+**Authentication Note:** To deploy with full authentication, ensure you configure `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWKS_URL`, and `CLERK_ISSUER` as per `CLERK_SETUP.md`.
+
+### Deploying to Render
+
+Both `apps/api/Dockerfile` and `apps/web/Dockerfile` bind to Render's injected `$PORT` at runtime. Create two Render Web Services (Docker runtime):
+
+- **api** — Root Directory `apps/api`, health check path `/health`. Point `DATABASE_URL` at a Neon pooled connection string (asyncpg driver, `?ssl=require`), and `QDRANT_URL`/`QDRANT_API_KEY` at a Qdrant Cloud cluster instead of the local host/port pair.
+- **web** — Root Directory `apps/web`. `NEXT_PUBLIC_*` vars (`NEXT_PUBLIC_API_URL`, Clerk keys) must be marked **"Available at build time"** — Next.js bakes them into the client bundle at build, not at runtime.
+
+Deploy the api service first, then set `NEXT_PUBLIC_API_URL` on web and `CORS_ORIGINS` on api to each other's Render URLs.
 
 ---
 
@@ -337,7 +418,8 @@ make clean      # docker compose down -v + remove build artifacts
 ## Roadmap
 
 - [ ] Batch upload via CLI / folder watch
-- [ ] Email polling (IMAP integration)
+- [x] Email import (IMAP connector — optional, manual invocation, see Configuration Reference)
+- [ ] Automatic email polling / scheduler for the IMAP connector
 - [ ] Multi-page line item extraction improvements
 - [ ] Webhook signature verification
 - [ ] Export to CSV / accounting system integrations (QuickBooks, Xero)

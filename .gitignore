@@ -94,7 +94,7 @@ apps/api/alembic/versions/__pycache__/
 # Misc
 *.md
 # Allow core documentation files
-!README.md
-!ARCHITECTURE.md
+# !README.md
+# !ARCHITECTURE.md
 images/
 *.xlsx
