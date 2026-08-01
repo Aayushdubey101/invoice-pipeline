@@ -31,8 +31,8 @@ class NoLLMProviderConfigured(Exception):
             message
             or (
                 "No LLM provider configured. Set LLM_PROVIDER env var to one of: "
-                "lm_studio, openai, anthropic, gemini. "
-                "Or set ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY for auto-detection. "
-                "Or start LM Studio at http://localhost:1234."
+                "auto, lm_studio, ollama, llamacpp, openai, anthropic, gemini, groq. "
+                "Or set ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY / GROQ_API_KEY "
+                "for auto-detection. Or start LM Studio at http://localhost:1234."
             )
         )

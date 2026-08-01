@@ -1,3 +1,5 @@
+"""Groq provider (OpenAI-compatible hosted API, https://api.groq.com/openai/v1)."""
+
 import time
 
 import instructor
@@ -6,20 +8,13 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from invoice_pipeline.config import settings
-from invoice_pipeline.llm.base import ExtractionMeta
+from invoice_pipeline.llm.base import ExtractionMeta, NoLLMProviderConfigured
 
 log = structlog.get_logger()
 
-# Cost per 1K tokens (input, output) for common models
-_OPENAI_COSTS: dict[str, tuple[float, float]] = {
-    "gpt-4o-mini": (0.00015, 0.00060),
-    "gpt-4o": (0.00250, 0.01000),
-    "gpt-4-turbo": (0.01000, 0.03000),
-}
 
-
-class OpenAIProvider:
-    provider_name = "openai"
+class GroqProvider:
+    provider_name = "groq"
 
     def __init__(
         self,
@@ -27,11 +22,24 @@ class OpenAIProvider:
         model: str | None = None,
         config: dict | None = None,
     ) -> None:
-        self._client = instructor.from_openai(
-            AsyncOpenAI(api_key=api_key or settings.OPENAI_API_KEY)
-        )
-        self._model = model or settings.OPENAI_MODEL
+        resolved_key = api_key or settings.GROQ_API_KEY
+        if not resolved_key:
+            raise NoLLMProviderConfigured("GROQ_API_KEY is not set.")
+        self._base_url = settings.GROQ_BASE_URL.rstrip("/")
+        self._model = model or settings.GROQ_MODEL
         self._config = config or {}
+        # Mode.JSON (plain JSON response, validated client-side by pydantic) instead of
+        # the default tool-calling mode: Groq's tool-call validation rejects function
+        # calls that omit optional/nullable schema properties, which real extractions
+        # routinely do (e.g. a missing buyer_address) — stricter than OpenAI's.
+        self._client = instructor.from_openai(
+            AsyncOpenAI(
+                api_key=resolved_key,
+                base_url=self._base_url,
+                timeout=settings.GROQ_TIMEOUT,
+            ),
+            mode=instructor.Mode.JSON,
+        )
 
     async def extract(
         self,
@@ -41,10 +49,9 @@ class OpenAIProvider:
         temperature: float = 0.0,
     ) -> tuple[BaseModel, ExtractionMeta]:
         start = time.monotonic()
-
-        extra_kwargs: dict = {}
-        if self._config.get("max_tokens") is not None:
-            extra_kwargs["max_tokens"] = self._config["max_tokens"]
+        effective_temp = self._config.get(
+            "temperature", temperature if temperature is not None else settings.GROQ_TEMPERATURE
+        )
 
         response, raw = await self._client.chat.completions.create_with_completion(
             model=self._model,
@@ -53,9 +60,9 @@ class OpenAIProvider:
                 {"role": "user", "content": text},
             ],
             response_model=schema,
-            temperature=self._config.get("temperature", temperature),
+            temperature=effective_temp,
+            max_tokens=self._config.get("max_tokens", settings.GROQ_MAX_TOKENS),
             max_retries=settings.LLM_MAX_RETRIES,
-            **extra_kwargs,
         )
 
         latency_ms = (time.monotonic() - start) * 1000
@@ -63,16 +70,13 @@ class OpenAIProvider:
         tokens_in = usage.prompt_tokens if usage else 0
         tokens_out = usage.completion_tokens if usage else 0
 
-        cost_in, cost_out = _OPENAI_COSTS.get(self._model, (0.0, 0.0))
-        cost = (tokens_in / 1000 * cost_in) + (tokens_out / 1000 * cost_out)
-
         meta = ExtractionMeta(
             provider_name=self.provider_name,
             model_name=self._model,
             latency_ms=latency_ms,
             tokens_in=tokens_in,
             tokens_out=tokens_out,
-            cost_estimate=cost,
+            cost_estimate=0.0,  # Groq pricing varies by model; not tracked here.
         )
 
         log.info(
@@ -82,7 +86,6 @@ class OpenAIProvider:
             latency_ms=round(latency_ms),
             tokens_in=tokens_in,
             tokens_out=tokens_out,
-            cost_usd=round(cost, 6),
         )
 
         return response, meta

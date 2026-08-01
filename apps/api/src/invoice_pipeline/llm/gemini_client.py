@@ -19,13 +19,20 @@ _GEMINI_COSTS: dict[str, tuple[float, float]] = {
 class GeminiProvider:
     provider_name = "gemini"
 
-    def __init__(self) -> None:
-        if not settings.GEMINI_API_KEY or not settings.GEMINI_API_KEY.strip():
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        config: dict | None = None,
+    ) -> None:
+        resolved_key = api_key or settings.GEMINI_API_KEY
+        if not resolved_key or not resolved_key.strip():
             raise NoLLMProviderConfigured("Gemini API key is not configured.")
         try:
-            google_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            google_client = genai.Client(api_key=resolved_key)
             self._client = instructor.from_genai(google_client, use_async=True)
-            self._model = settings.GEMINI_MODEL
+            self._model = model or settings.GEMINI_MODEL
+            self._config = config or {}
         except Exception as e:
             raise NoLLMProviderConfigured(f"Failed to initialize Gemini Client: {str(e)}") from e
 
@@ -38,6 +45,10 @@ class GeminiProvider:
     ) -> tuple[BaseModel, ExtractionMeta]:
         start = time.monotonic()
 
+        extra_kwargs: dict = {}
+        if self._config.get("max_tokens") is not None:
+            extra_kwargs["max_tokens"] = self._config["max_tokens"]
+
         response, raw = await self._client.chat.completions.create_with_completion(
             model=self._model,
             messages=[
@@ -45,8 +56,9 @@ class GeminiProvider:
                 {"role": "user", "content": text},
             ],
             response_model=schema,
-            temperature=temperature,
+            temperature=self._config.get("temperature", temperature),
             max_retries=settings.LLM_MAX_RETRIES,
+            **extra_kwargs,
         )
 
         latency_ms = (time.monotonic() - start) * 1000

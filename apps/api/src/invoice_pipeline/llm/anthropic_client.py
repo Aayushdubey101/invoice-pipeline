@@ -20,11 +20,17 @@ _ANTHROPIC_COSTS: dict[str, tuple[float, float]] = {
 class AnthropicProvider:
     provider_name = "anthropic"
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        config: dict | None = None,
+    ) -> None:
         self._client = instructor.from_anthropic(
-            anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+            anthropic.AsyncAnthropic(api_key=api_key or settings.ANTHROPIC_API_KEY)
         )
-        self._model = settings.ANTHROPIC_MODEL
+        self._model = model or settings.ANTHROPIC_MODEL
+        self._config = config or {}
 
     async def extract(
         self,
@@ -37,11 +43,11 @@ class AnthropicProvider:
 
         response, raw = await self._client.messages.create_with_completion(
             model=self._model,
-            max_tokens=4096,
+            max_tokens=self._config.get("max_tokens", 4096),
             system=system_prompt,
             messages=[{"role": "user", "content": text}],
             response_model=schema,
-            temperature=temperature,
+            temperature=self._config.get("temperature", temperature),
             max_retries=settings.LLM_MAX_RETRIES,
         )
 
