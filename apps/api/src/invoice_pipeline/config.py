@@ -12,6 +12,7 @@ class LLMProviderName(str, Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GEMINI = "gemini"
+    GROQ = "groq"
     LLAMACPP = "llamacpp"
 
 
@@ -33,10 +34,12 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://invoice:invoice@localhost:5432/invoice_pipeline"
     DATABASE_URL_SYNC: str = "postgresql://invoice:invoice@localhost:5432/invoice_pipeline"
 
-    # ChromaDB
-    CHROMA_HOST: str = "localhost"
-    CHROMA_PORT: int = 8001
-    CHROMA_VENDOR_COLLECTION: str = "vendors"
+    # Qdrant
+    QDRANT_HOST: str = "localhost"
+    QDRANT_PORT: int = 6333
+    QDRANT_URL: str = ""
+    QDRANT_API_KEY: str = ""
+    QDRANT_VENDOR_COLLECTION: str = "vendors"
 
     # LLM
     LLM_PROVIDER: LLMProviderName = LLMProviderName.AUTO
@@ -55,6 +58,13 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
 
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    GROQ_TEMPERATURE: float = 0.0
+    GROQ_MAX_TOKENS: int = 4096
+    GROQ_TIMEOUT: float = 60.0
+
     # Ollama (local, OpenAI-compatible)
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
     OLLAMA_MODEL: str = "gemma3:4b"
@@ -69,6 +79,7 @@ class Settings(BaseSettings):
 
     # OCR
     OCR_ENGINE: OCREngineName = OCREngineName.TESSERACT
+    OCR_LANG: str = "eng+fra"  # tesseract langs; falls back to "eng" if a pack is missing
 
     # Pipeline
     LOW_CONFIDENCE_THRESHOLD: float = 0.75
@@ -78,24 +89,29 @@ class Settings(BaseSettings):
     # Webhooks
     REVIEW_WEBHOOK_URL: str = ""
 
+    # Optional email connector (Phase 11) — disabled by default, no effect when off
+    EMAIL_IMPORT_ENABLED: bool = False
+    EMAIL_CONNECT_TIMEOUT_SECONDS: int = 15
+
+    # Clerk (Phase 14.8) — bearer-token verification for authenticated workspaces
+    CLERK_JWKS_URL: str = ""
+    CLERK_ISSUER: str = ""
+    CLERK_AUDIENCE: str = ""
+
     @property
     def max_upload_bytes(self) -> int:
         return self.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 
 # ── Runtime overrides (persisted across restarts) ────────────────────────────
-RUNTIME_OVERRIDES_PATH = Path(__file__).resolve().parent.parent.parent / "runtime_settings.json"
+RUNTIME_OVERRIDES_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "config" / "runtime_settings.json"
+)
 
 _PERSISTABLE_FIELDS: tuple[str, ...] = (
     "LLM_PROVIDER",
     "LM_STUDIO_BASE_URL",
     "LM_STUDIO_MODEL",
-    "OPENAI_API_KEY",
-    "OPENAI_MODEL",
-    "ANTHROPIC_API_KEY",
-    "ANTHROPIC_MODEL",
-    "GEMINI_API_KEY",
-    "GEMINI_MODEL",
     "LLAMACPP_BASE_URL",
     "LLAMACPP_MODEL",
     "LLAMACPP_API_KEY",
@@ -105,6 +121,15 @@ _PERSISTABLE_FIELDS: tuple[str, ...] = (
     "OLLAMA_BASE_URL",
     "OLLAMA_MODEL",
 )
+
+
+# Priority: runtime settings > .env > defaults. An empty runtime override for a
+# secret must fall back to .env rather than permanently blanking it out.
+# Phase 13: cloud provider keys (OPENAI/ANTHROPIC/GEMINI/GROQ) are no longer
+# runtime-PATCH-able or persisted to disk — they're browser-session-only (BYOK,
+# see llm/override.py). LLAMACPP_API_KEY stays: it's a local provider, no real
+# secret (dummy key tolerated).
+_API_KEY_FIELDS = frozenset({"LLAMACPP_API_KEY"})
 
 
 def _coerce(field: str, value: object) -> object:
@@ -121,8 +146,12 @@ def load_runtime_overrides(target: Settings) -> None:
     except (OSError, json.JSONDecodeError):
         return
     for field in _PERSISTABLE_FIELDS:
-        if field in data:
-            setattr(target, field, _coerce(field, data[field]))
+        if field not in data:
+            continue
+        value = data[field]
+        if field in _API_KEY_FIELDS and not value:
+            continue  # empty override -> keep the .env-loaded value
+        setattr(target, field, _coerce(field, value))
 
 
 def save_runtime_overrides(source: Settings) -> None:
@@ -134,6 +163,21 @@ def save_runtime_overrides(source: Settings) -> None:
         payload[field] = value
     RUNTIME_OVERRIDES_PATH.parent.mkdir(parents=True, exist_ok=True)
     RUNTIME_OVERRIDES_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def reset_runtime_overrides(target: Settings) -> None:
+    """Drop the persisted local-provider overrides and restore `.env` defaults.
+
+    Local-provider settings (Ollama/LM Studio/llama.cpp) are a single
+    instance-wide file, unlike cloud provider keys which are already
+    browser-session-only (see llm/override.py). A guest changing them would
+    otherwise permanently affect every other user of this deployment, so a
+    guest workspace ending must reset them back to `.env`.
+    """
+    RUNTIME_OVERRIDES_PATH.unlink(missing_ok=True)
+    fresh = Settings()
+    for field in _PERSISTABLE_FIELDS:
+        setattr(target, field, getattr(fresh, field))
 
 
 settings = Settings()
