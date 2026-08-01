@@ -4,18 +4,22 @@ import { useEffect, useState } from "react";
 import {
   Cpu,
   Settings as SettingsIcon,
-  Key,
   RefreshCw,
-  AlertTriangle,
+  CheckCircle2,
+  XCircle,
   Database,
   Server,
   ShieldCheck,
+  Sparkles,
+  CloudCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { apiClient, type AppSettings, type SettingsUpdatePayload } from "@/lib/api-client";
+import { ProviderCard } from "@/components/ProviderCard";
+import { apiClient, type AppSettings, type ProviderPreference, type SettingsUpdatePayload } from "@/lib/api-client";
+import type { CloudProvider } from "@/contexts/ProviderSessionContext";
 
 interface LLMStatus {
   provider: string;
@@ -35,11 +39,28 @@ type LlamaCppTest =
   | { state: "online"; latency_ms?: number; endpoint?: string; models: string[] }
   | { state: "offline"; message: string; endpoint?: string };
 
+const LOCAL_PROVIDERS = [
+  { id: "ollama", name: "Ollama" },
+  { id: "lm_studio", name: "LM Studio" },
+  { id: "llamacpp", name: "llama.cpp" },
+] as const;
+
+const CLOUD_PROVIDERS: { id: CloudProvider; name: string }[] = [
+  { id: "openai", name: "OpenAI" },
+  { id: "anthropic", name: "Anthropic" },
+  { id: "gemini", name: "Google Gemini" },
+  { id: "groq", name: "Groq" },
+];
+
 export default function SettingsPage() {
   const [status, setStatus] = useState<LLMStatus | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [providerPreference, setProviderPreference] = useState<ProviderPreference | null>(null);
 
   const [selectedProvider, setSelectedProvider] = useState<string>("auto");
 
@@ -52,14 +73,6 @@ export default function SettingsPage() {
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState<string>("");
   const [ollamaModel, setOllamaModel] = useState<string>("");
   const [ollamaTest, setOllamaTest] = useState<LocalServerTest>({ state: "idle" });
-
-  // Cloud providers
-  const [openaiKey, setOpenaiKey] = useState<string>("");
-  const [openaiModel, setOpenaiModel] = useState<string>("");
-  const [anthropicKey, setAnthropicKey] = useState<string>("");
-  const [anthropicModel, setAnthropicModel] = useState<string>("");
-  const [geminiKey, setGeminiKey] = useState<string>("");
-  const [geminiModel, setGeminiModel] = useState<string>("");
 
   // llama.cpp
   const [llamacppBaseUrl, setLlamacppBaseUrl] = useState<string>("");
@@ -104,47 +117,6 @@ export default function SettingsPage() {
     }
   };
 
-  const loadData = async () => {
-    try {
-      const [statusRes, settingsRes] = await Promise.all([
-        apiClient.llm.status(),
-        apiClient.settings.get(),
-      ]);
-      setStatus(statusRes);
-      setSettings(settingsRes);
-
-      setSelectedProvider(settingsRes.llm_provider);
-      setLmStudioModel(settingsRes.lm_studio_model);
-      setLmStudioBaseUrl(settingsRes.lm_studio_base_url);
-      setOllamaBaseUrl(settingsRes.ollama_base_url);
-      setOllamaModel(settingsRes.ollama_model);
-      setOpenaiModel(settingsRes.openai_model);
-      setAnthropicModel(settingsRes.anthropic_model);
-      setGeminiModel(settingsRes.gemini_model);
-      setLlamacppBaseUrl(settingsRes.llamacpp_base_url);
-      setLlamacppModel(settingsRes.llamacpp_model);
-      setLlamacppContextLength(settingsRes.llamacpp_context_length);
-      setLlamacppTemperature(settingsRes.llamacpp_temperature);
-      setLlamacppMaxTokens(settingsRes.llamacpp_max_tokens);
-
-      if (statusRes.provider === "ollama") {
-        checkOllama(settingsRes.ollama_base_url);
-      } else {
-        checkLMStudio(settingsRes.lm_studio_base_url);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const testLlamaCpp = async () => {
     setLlamacppTest({ state: "testing" });
     try {
@@ -172,6 +144,59 @@ export default function SettingsPage() {
     }
   };
 
+  const loadData = async () => {
+    setLoadError(null);
+    try {
+      const [statusRes, settingsRes] = await Promise.all([
+        apiClient.llm.status(),
+        apiClient.settings.get(),
+      ]);
+      setStatus(statusRes);
+      setSettings(settingsRes);
+
+      setSelectedProvider(settingsRes.llm_provider);
+      setLmStudioModel(settingsRes.lm_studio_model);
+      setLmStudioBaseUrl(settingsRes.lm_studio_base_url);
+      setOllamaBaseUrl(settingsRes.ollama_base_url);
+      setOllamaModel(settingsRes.ollama_model);
+      setLlamacppBaseUrl(settingsRes.llamacpp_base_url);
+      setLlamacppModel(settingsRes.llamacpp_model);
+      setLlamacppContextLength(settingsRes.llamacpp_context_length);
+      setLlamacppTemperature(settingsRes.llamacpp_temperature);
+      setLlamacppMaxTokens(settingsRes.llamacpp_max_tokens);
+
+      if (statusRes.provider === "ollama") {
+        checkOllama(settingsRes.ollama_base_url);
+      } else {
+        checkLMStudio(settingsRes.lm_studio_base_url);
+      }
+
+      // Non-blocking: persisted model/config preference is a nice-to-have
+      // prefill, not required for the page to function.
+      try {
+        const me = await apiClient.workspaces.me();
+        setWorkspaceId(me.id);
+        const pref = await apiClient.workspaces.getProviderPreference(me.id);
+        if (pref.provider && pref.model) {
+          setProviderPreference(pref as ProviderPreference);
+        }
+      } catch (err) {
+        console.error("Failed to load provider preference:", err);
+      }
+    } catch (err) {
+      console.error(err);
+      setLoadError(err instanceof Error ? err.message : "Failed to load settings.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -182,9 +207,6 @@ export default function SettingsPage() {
         lm_studio_base_url: lmStudioBaseUrl,
         ollama_base_url: ollamaBaseUrl,
         ollama_model: ollamaModel,
-        openai_model: openaiModel,
-        anthropic_model: anthropicModel,
-        gemini_model: geminiModel,
         llamacpp_base_url: llamacppBaseUrl,
         llamacpp_model: llamacppModel,
         llamacpp_context_length: llamacppContextLength,
@@ -192,9 +214,7 @@ export default function SettingsPage() {
         llamacpp_max_tokens: llamacppMaxTokens,
       };
 
-      if (openaiKey) payload.openai_api_key = openaiKey;
-      if (anthropicKey) payload.anthropic_api_key = anthropicKey;
-      if (geminiKey) payload.gemini_api_key = geminiKey;
+      // Empty key field means "leave as-is" — never send a blank to clobber a saved/.env key.
       if (llamacppKey) payload.llamacpp_api_key = llamacppKey;
 
       const updated = await apiClient.settings.update(payload);
@@ -203,15 +223,10 @@ export default function SettingsPage() {
       const statusRes = await apiClient.llm.status();
       setStatus(statusRes);
 
-      setOpenaiKey("");
-      setAnthropicKey("");
-      setGeminiKey("");
       setLlamacppKey("");
-
-      alert("Settings updated successfully and provider reloaded!");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save settings";
-      alert(message);
+      setLoadError(message);
     } finally {
       setSaving(false);
     }
@@ -224,11 +239,16 @@ export default function SettingsPage() {
   const localTest = isOllamaActive ? ollamaTest : lmStudioTest;
   const localUrl = isOllamaActive ? ollamaBaseUrl : lmStudioBaseUrl;
   const localLabel = isOllamaActive ? "Ollama Host" : "LM Studio Host";
-  const localModels =
-    localTest.state === "online" ? localTest.models : [];
+  const localModels = localTest.state === "online" ? localTest.models : [];
   const localOnline = localTest.state === "online";
   const localPinging = localTest.state === "testing";
   const showLocalCard = isOllamaActive || isLmStudioActive;
+
+  const currentModelMap: Record<string, string> = {
+    ollama: ollamaModel,
+    lm_studio: lmStudioModel,
+    llamacpp: llamacppModel,
+  };
 
   if (loading) {
     return (
@@ -249,6 +269,15 @@ export default function SettingsPage() {
           Configure active LLM extraction engines, endpoints, API keys, and model overrides.
         </p>
       </div>
+
+      {loadError && (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+          <span>{loadError}</span>
+          <Button size="sm" variant="outline" onClick={loadData}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* Connection Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -310,51 +339,94 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSave} className="space-y-6 border rounded-xl p-6 bg-card">
-        <h2 className="text-lg font-bold">LLM Pipeline Settings</h2>
+      {/* Cloud Providers — browser-session only (BYOK) */}
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <CloudCog className="h-5 w-5 text-primary" /> Cloud Providers
+          </h2>
+          <p className="text-muted-foreground text-xs mt-1">
+            Your API key stays in this browser tab&apos;s session only — never sent to or stored on our
+            servers. It is cleared when this browser session ends. See{" "}
+            <a href="/docs" className="underline underline-offset-2">
+              the docs
+            </a>{" "}
+            for how to obtain a key.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {CLOUD_PROVIDERS.map((prov) => (
+            <ProviderCard
+              key={prov.id}
+              provider={prov.id}
+              label={prov.name}
+              workspaceId={workspaceId}
+              initialPreference={
+                providerPreference?.provider === prov.id
+                  ? { 
+                      model: providerPreference.model, 
+                      config: providerPreference.config,
+                      has_saved_api_key: providerPreference.has_saved_api_key
+                    }
+                  : undefined
+              }
+            />
+          ))}
+        </div>
+      </div>
 
+      <form onSubmit={handleSave} className="space-y-6 border rounded-xl p-6 bg-card">
+        <h2 className="text-lg font-bold">Local / Self-Hosted Pipeline Settings</h2>
+
+        {/* Auto Detect */}
         <div className="space-y-2">
-          <label className="text-sm font-medium">Select LLM Provider</label>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { id: "auto", name: "Auto Detect" },
-              { id: "ollama", name: "Ollama", badge: "Local Offline AI" },
-              { id: "lm_studio", name: "LM Studio", badge: "Local Offline AI" },
-              { id: "openai", name: "OpenAI API" },
-              { id: "anthropic", name: "Anthropic" },
-              { id: "gemini", name: "Google Gemini" },
-              { id: "llamacpp", name: "llama.cpp", badge: "Local Offline AI" },
-            ].map((prov) => (
+          <label className="text-sm font-medium">Provider Mode</label>
+          <div
+            onClick={() => setSelectedProvider("auto")}
+            className={`border rounded-lg p-3 cursor-pointer transition-all flex items-center gap-2 ${
+              selectedProvider === "auto" ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted"
+            }`}
+          >
+            <Sparkles className="h-4 w-4 text-primary shrink-0" />
+            <div>
+              <span className="text-sm font-semibold">Auto Detect</span>
+              <p className="text-xs text-muted-foreground">
+                Priority: browser session key → reachable LM Studio → Ollama → llama.cpp → admin .env cloud key.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Local Providers */}
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Local Providers</label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {LOCAL_PROVIDERS.map((prov) => (
               <div
                 key={prov.id}
                 onClick={() => setSelectedProvider(prov.id)}
-                className={`border rounded-lg p-3 text-center cursor-pointer transition-all flex flex-col items-center gap-1 ${
-                  selectedProvider === prov.id
-                    ? "border-primary bg-primary/5 ring-1 ring-primary"
-                    : "hover:bg-muted"
+                className={`border rounded-lg p-3 cursor-pointer transition-all space-y-1 ${
+                  selectedProvider === prov.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted"
                 }`}
               >
-                <span className="text-xs font-semibold">{prov.name}</span>
-                {prov.badge && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold">{prov.name}</span>
                   <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[9px] py-0">
-                    {prov.badge}
+                    Local
                   </Badge>
-                )}
+                </div>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {currentModelMap[prov.id] || "No model set"}
+                </p>
               </div>
             ))}
           </div>
-          <p className="text-xs text-muted-foreground">
-            Auto Detect prioritizes a reachable Ollama or LM Studio server, then falls back to configured API keys in order.
-          </p>
         </div>
 
         <Tabs defaultValue="ollama" className="w-full pt-4">
-          <TabsList className="grid grid-cols-6 w-full">
+          <TabsList className="grid grid-cols-3 w-full">
             <TabsTrigger value="ollama">Ollama</TabsTrigger>
             <TabsTrigger value="lm_studio">LM Studio</TabsTrigger>
-            <TabsTrigger value="openai">OpenAI</TabsTrigger>
-            <TabsTrigger value="anthropic">Anthropic</TabsTrigger>
-            <TabsTrigger value="gemini">Gemini</TabsTrigger>
             <TabsTrigger value="llamacpp">llama.cpp</TabsTrigger>
           </TabsList>
 
@@ -376,13 +448,13 @@ export default function SettingsPage() {
                 disabled={ollamaTest.state === "testing"}
               >
                 <RefreshCw className={`h-3 w-3 ${ollamaTest.state === "testing" ? "animate-spin" : ""}`} />
-                Detect Models
+                Test Connection
               </Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-semibold">Ollama Base URL</label>
+                <label className="text-xs text-muted-foreground font-semibold">Ollama Host</label>
                 <Input
                   value={ollamaBaseUrl}
                   onChange={(e) => setOllamaBaseUrl(e.target.value)}
@@ -412,19 +484,19 @@ export default function SettingsPage() {
             </div>
 
             {ollamaTest.state === "online" && (
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 text-xs space-y-1">
-                <p className="font-semibold text-emerald-600">
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 text-xs">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <p className="text-emerald-600 font-semibold">
                   Connected — {ollamaTest.models.length} model(s) available
                 </p>
-                <p className="text-muted-foreground">Models: {ollamaTest.models.join(", ")}</p>
               </div>
             )}
 
             {ollamaTest.state === "offline" && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-yellow-200 bg-yellow-50/50 p-4 text-xs text-yellow-700 dark:border-yellow-900/50 dark:bg-yellow-950/20 dark:text-yellow-400">
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50/50 p-4 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400">
+                <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-semibold">Ollama unreachable — {ollamaTest.message}</p>
+                  <p className="font-semibold">Failed — {ollamaTest.message}</p>
                   <p className="mt-0.5 leading-relaxed">
                     Make sure Ollama is running: <code className="bg-muted/50 px-1 rounded">ollama serve</code>
                   </p>
@@ -445,13 +517,13 @@ export default function SettingsPage() {
                 onClick={() => checkLMStudio(lmStudioBaseUrl)}
                 disabled={lmStudioTest.state === "testing"}
               >
-                <RefreshCw className={`h-3 w-3 ${lmStudioTest.state === "testing" ? "animate-spin" : ""}`} /> Ping Local Server
+                <RefreshCw className={`h-3 w-3 ${lmStudioTest.state === "testing" ? "animate-spin" : ""}`} /> Test Connection
               </Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-semibold">Base Endpoint URL</label>
+                <label className="text-xs text-muted-foreground font-semibold">Endpoint</label>
                 <Input
                   value={lmStudioBaseUrl}
                   onChange={(e) => setLmStudioBaseUrl(e.target.value)}
@@ -459,7 +531,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-semibold">Active/Target Model</label>
+                <label className="text-xs text-muted-foreground font-semibold">Model</label>
                 {lmStudioTest.state === "online" && lmStudioTest.models.length > 0 ? (
                   <select
                     value={lmStudioModel}
@@ -480,95 +552,26 @@ export default function SettingsPage() {
               </div>
             </div>
 
+            {lmStudioTest.state === "online" && (
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 text-xs">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <p className="text-emerald-600 font-semibold">
+                  Connected — {lmStudioTest.models.length} model(s) available
+                </p>
+              </div>
+            )}
+
             {lmStudioTest.state === "offline" && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-yellow-200 bg-yellow-50/50 p-4 text-xs text-yellow-700 dark:border-yellow-900/50 dark:bg-yellow-950/20 dark:text-yellow-400">
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50/50 p-4 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400">
+                <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-semibold">Local LM Studio instance unreachable</p>
+                  <p className="font-semibold">Failed — local LM Studio instance unreachable</p>
                   <p className="mt-0.5 leading-relaxed">
                     Make sure LM Studio is open, model is loaded, and &apos;Local Server&apos; is started on port 1234.
                   </p>
                 </div>
               </div>
             )}
-          </TabsContent>
-
-          {/* OpenAI Tab */}
-          <TabsContent value="openai" className="space-y-4 pt-4 border-t">
-            <h3 className="font-semibold text-sm flex items-center gap-1.5">
-              <Key className="h-4 w-4 text-amber-500" /> OpenAI Configuration
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-semibold">OpenAI Model</label>
-                <Input
-                  value={openaiModel}
-                  onChange={(e) => setOpenaiModel(e.target.value)}
-                  placeholder="gpt-4o-mini"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-semibold">API Key</label>
-                <Input
-                  type="password"
-                  value={openaiKey}
-                  onChange={(e) => setOpenaiKey(e.target.value)}
-                  placeholder={settings?.has_openai_key ? "•••••••••••••••• (Saved)" : "Enter OpenAI API Key"}
-                />
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* Anthropic Tab */}
-          <TabsContent value="anthropic" className="space-y-4 pt-4 border-t">
-            <h3 className="font-semibold text-sm flex items-center gap-1.5">
-              <Key className="h-4 w-4 text-amber-500" /> Anthropic Configuration
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-semibold">Anthropic Model</label>
-                <Input
-                  value={anthropicModel}
-                  onChange={(e) => setAnthropicModel(e.target.value)}
-                  placeholder="claude-3-5-sonnet"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-semibold">API Key</label>
-                <Input
-                  type="password"
-                  value={anthropicKey}
-                  onChange={(e) => setAnthropicKey(e.target.value)}
-                  placeholder={settings?.has_anthropic_key ? "•••••••••••••••• (Saved)" : "Enter Anthropic API Key"}
-                />
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* Gemini Tab */}
-          <TabsContent value="gemini" className="space-y-4 pt-4 border-t">
-            <h3 className="font-semibold text-sm flex items-center gap-1.5">
-              <Key className="h-4 w-4 text-amber-500" /> Gemini Configuration
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-semibold">Gemini Model</label>
-                <Input
-                  value={geminiModel}
-                  onChange={(e) => setGeminiModel(e.target.value)}
-                  placeholder="gemini-2.0-flash"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-semibold">API Key</label>
-                <Input
-                  type="password"
-                  value={geminiKey}
-                  onChange={(e) => setGeminiKey(e.target.value)}
-                  placeholder={settings?.has_gemini_key ? "•••••••••••••••• (Saved)" : "Enter Gemini API Key"}
-                />
-              </div>
-            </div>
           </TabsContent>
 
           {/* llama.cpp Tab */}
@@ -595,7 +598,7 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-semibold">Base URL</label>
+                <label className="text-xs text-muted-foreground font-semibold">Endpoint</label>
                 <Input
                   value={llamacppBaseUrl}
                   onChange={(e) => setLlamacppBaseUrl(e.target.value)}
@@ -654,10 +657,9 @@ export default function SettingsPage() {
 
             {llamacppTest.state === "online" && (
               <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 text-xs space-y-1">
-                <p className="font-semibold text-emerald-600">
-                  Connected — latency {llamacppTest.latency_ms?.toFixed(0)}ms
+                <p className="flex items-center gap-2 font-semibold text-emerald-600">
+                  <CheckCircle2 className="h-4 w-4" /> Connected — latency {llamacppTest.latency_ms?.toFixed(0)}ms
                 </p>
-                <p className="text-muted-foreground">Endpoint: {llamacppTest.endpoint}</p>
                 {llamacppTest.models.length > 0 && (
                   <p className="text-muted-foreground">
                     Available models: {llamacppTest.models.join(", ")}
@@ -667,21 +669,16 @@ export default function SettingsPage() {
             )}
 
             {llamacppTest.state === "offline" && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-yellow-200 bg-yellow-50/50 p-4 text-xs text-yellow-700 dark:border-yellow-900/50 dark:bg-yellow-950/20 dark:text-yellow-400">
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50/50 p-4 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400">
+                <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-semibold">{llamacppTest.message}</p>
+                  <p className="font-semibold">Failed — {llamacppTest.message}</p>
                   <p className="mt-0.5 leading-relaxed">
                     Start llama.cpp with: <code className="bg-muted/50 px-1 rounded">./llama-server -m model.gguf --port 8080</code>
                   </p>
                 </div>
               </div>
             )}
-
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Compatible with llama.cpp, LM Studio, and Ollama OpenAI-compatible endpoints. JSON-schema first,
-              markdown-fenced JSON fallback. Streaming supported.
-            </p>
           </TabsContent>
         </Tabs>
 
