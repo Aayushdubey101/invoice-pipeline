@@ -40,6 +40,16 @@ dependencies = [
     # Utilities
     "python-multipart>=0.0.20",
     "aiofiles>=24.1.0",
+    "pymupdf>=1.27.2.3",
+    # Phase 11: Excel export
+    "openpyxl>=3.1.0",
+    # Phase 14: PDF export (Finish Session bundle)
+    "reportlab>=4.2.0",
+    # Phase 14.7: hourly guest-workspace cleanup
+    "apscheduler>=3.10.0",
+    # Phase 14.8: Clerk bearer-token verification
+    "pyjwt[crypto]>=2.9.0",
+    "cryptography>=48.0.0",
 ]
 
 [project.optional-dependencies]
@@ -54,6 +64,10 @@ ocr = [
     "pymupdf>=1.25.0",
     "pytesseract>=0.3.13",
     "unstructured[email]>=0.16.0",
+    "opencv-python-headless>=4.10.0",
+    "pdf2image>=1.17.0",
+    "Pillow>=10.4.0",
+    "numpy>=1.26.0",
 ]
 # Phase 4+: PaddleOCR (heavy GPU/CPU dep)
 paddle = [
@@ -64,7 +78,7 @@ paddle = [
 ml = [
     "torch>=2.0.0",
     "sentence-transformers>=3.3.0",
-    "chromadb>=0.6.0",
+    "qdrant-client>=1.7.0",
 ]
 # Full install: everything
 full = [
@@ -77,7 +91,6 @@ dev = [
     "httpx>=0.28.0",
     "ruff>=0.8.0",
     "mypy>=1.13.0",
-    "reportlab>=4.2.0",
 ]
 
 [build-system]
@@ -139,5 +152,12 @@ source = [
     "src/invoice_pipeline",
     "**/.venv/Lib/site-packages/invoice_pipeline",
     "**/site-packages/invoice_pipeline",
+]
+
+[dependency-groups]
+dev = [
+    "numpy>=2.3.5",
+    "opencv-python-headless>=5.0.0.93",
+    "pytesseract>=0.3.13",
 ]
 

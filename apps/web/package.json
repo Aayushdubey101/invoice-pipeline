@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@clerk/nextjs": "^7.6.2",
+    "@clerk/ui": "^1.27.0",
     "@tanstack/react-query": "^5.100.11",
     "@tanstack/react-query-devtools": "^5.100.11",
     "class-variance-authority": "^0.7.1",
@@ -35,16 +37,19 @@
     "zustand": "^5.0.13"
   },
   "pnpm": {
-    "ignoredBuiltDependencies": ["sharp", "unrs-resolver"]
+    "ignoredBuiltDependencies": [
+      "sharp",
+      "unrs-resolver"
+    ]
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^4.5.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
