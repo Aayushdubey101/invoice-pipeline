@@ -16,6 +16,9 @@ desktop.ini
 *.log
 logs/
 
+# Generated benchmark reports (regenerated per run)
+apps/api/scripts/benchmarks/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -58,6 +61,7 @@ build/
 
 # Environment files
 .env
+.env.render
 # .env.local
 
 # Docker
@@ -92,3 +96,5 @@ apps/api/alembic/versions/__pycache__/
 # Allow core documentation files
 !README.md
 !ARCHITECTURE.md
+images/
+*.xlsx
