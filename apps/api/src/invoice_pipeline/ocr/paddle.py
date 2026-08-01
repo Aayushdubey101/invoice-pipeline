@@ -59,6 +59,7 @@ class PaddleOCREngine:
                     text=text,
                     bbox=(min(xs), min(ys), max(xs), max(ys)),
                     page=page_num,
+                    confidence=float(conf),
                 )
             )
             lines.append(text)

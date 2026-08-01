@@ -27,22 +27,38 @@ class TesseractEngine:
 
     def _extract_image(self, img_bytes: bytes, page_num: int) -> Page:
         import pytesseract
-        from PIL import Image
+        from PIL import Image, ImageOps
+
+        from invoice_pipeline.config import settings
 
         img = Image.open(io.BytesIO(img_bytes))
-        text = pytesseract.image_to_string(img)
+        img = ImageOps.exif_transpose(img)  # honor camera rotation
+        img = ImageOps.autocontrast(img.convert("L"))  # grayscale + contrast → cleaner OCR
 
-        data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+        lang = settings.OCR_LANG
+        try:
+            text = pytesseract.image_to_string(img, lang=lang)
+        except pytesseract.TesseractError:
+            # a language pack (e.g. fra) not installed → degrade to English
+            log.warning("ocr_lang_fallback", requested=lang, fallback="eng")
+            lang = "eng"
+            text = pytesseract.image_to_string(img, lang=lang)
+
+        data = pytesseract.image_to_data(img, lang=lang, output_type=pytesseract.Output.DICT)
         words: list[Word] = []
         for i, word_text in enumerate(data["text"]):
             if not word_text.strip():
                 continue
             x, y, w, h = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
+            conf = data["conf"][i]
+            # PyTesseract conf can be -1 if invalid, normalize to 0-1
+            conf_val = max(0.0, float(conf)) / 100.0 if conf != "-1" else 0.0
             words.append(
                 Word(
                     text=word_text,
                     bbox=(float(x), float(y), float(x + w), float(y + h)),
                     page=page_num,
+                    confidence=conf_val,
                 )
             )
 
