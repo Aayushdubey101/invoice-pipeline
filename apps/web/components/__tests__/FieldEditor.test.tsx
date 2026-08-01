@@ -15,6 +15,8 @@ function makeField(overrides: Partial<InvoiceField> = {}): InvoiceField {
     needs_review: false,
     reviewed: false,
     reviewed_value: null,
+    page: null,
+    bbox: null,
     ...overrides,
   };
 }

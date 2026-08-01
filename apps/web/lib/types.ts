@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-// ── Schemas ──────────────────────────────────────────────────────────────────
+// ── Confidence Breakdown ───────────────────────────────────────────────────────
+// Shape produced by confidence/engine.py::ConfidenceEngine.model_dump_summary():
+// a flat map of named signal scores plus "overall". See CLAUDE.md "Confidence Scoring".
+
+export const ConfidenceBreakdownSchema = z.object({ overall: z.number() }).catchall(z.number());
+
+// ── Schemas ───────────────────────────────────────────────────────────────────
 
 export const FieldValueSchema = z.object({
   value: z.string().nullable(),
@@ -40,6 +46,8 @@ export const InvoiceFieldSchema = z.object({
   canonical_value: z.string().nullable(),
   confidence: z.number(),
   evidence: z.string().nullable(),
+  page: z.number().nullable(),
+  bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),
   needs_review: z.boolean(),
   reviewed: z.boolean(),
   reviewed_value: z.string().nullable(),
@@ -52,6 +60,17 @@ export const LineItemRowSchema = z.object({
   quantity: z.string().nullable(),
   unit_price: z.string().nullable(),
   total: z.string().nullable(),
+  // Phase 4 rich fields
+  description_confidence: z.number().optional().default(0),
+  quantity_confidence: z.number().optional().default(0),
+  unit_price_confidence: z.number().optional().default(0),
+  total_confidence: z.number().optional().default(0),
+  row_type: z.string().optional().default("item"),
+  math_valid: z.boolean().nullable().optional(),
+  page: z.number().nullable().optional(),
+  bbox: z.array(z.number()).nullable().optional(),
+  source_evidence: z.string().nullable().optional(),
+  table_index: z.number().optional().default(0),
 });
 
 export const InvoiceDetailSchema = z.object({
@@ -76,6 +95,7 @@ export const InvoiceDetailSchema = z.object({
   fields: z.array(InvoiceFieldSchema),
   line_items: z.array(LineItemRowSchema),
   raw_extraction: z.record(z.string(), z.unknown()),
+  confidence_breakdown: ConfidenceBreakdownSchema.nullable().optional(),
 });
 
 export const ReviewQueueItemSchema = z.object({
@@ -108,6 +128,15 @@ export const VendorSchema = z.object({
   tax_id: z.string().nullable().optional(),
   status: z.enum(["active", "pending_review", "inactive"]),
   created_at: z.string().optional(),
+  // Phase 5: Vendor Intelligence Memory
+  tax_ids: z.array(z.string()).optional().default([]),
+  historical_invoice_numbers: z.array(z.string()).optional().default([]),
+  preferred_currency: z.string().nullable().optional(),
+  preferred_payment_terms: z.string().nullable().optional(),
+  frequently_used_products: z.array(z.string()).optional().default([]),
+  avg_confidence: z.number().nullable().optional(),
+  invoice_count: z.number().optional().default(0),
+  layout_patterns: z.record(z.string(), z.unknown()).optional().default({}),
 });
 
 export const VendorListSchema = z.object({
@@ -124,6 +153,7 @@ export const UploadResponseSchema = z.object({
 // ── Inferred types ────────────────────────────────────────────────────────────
 
 export type FieldValue = z.infer<typeof FieldValueSchema>;
+export type ConfidenceBreakdown = z.infer<typeof ConfidenceBreakdownSchema>;
 export type LineItem = z.infer<typeof LineItemSchema>;
 export type RawInvoice = z.infer<typeof RawInvoiceSchema>;
 export type InvoiceField = z.infer<typeof InvoiceFieldSchema>;

@@ -1,18 +1,22 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Check, X, Pencil } from "lucide-react";
+import { Check, X, Pencil, Locate } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import type { InvoiceField } from "@/lib/types";
 
 interface FieldEditorProps {
   field: InvoiceField;
+  isEditing?: boolean;
+  onEdit?: (editing: boolean) => void;
   onSave: (fieldId: string, value: string | null) => Promise<void>;
 }
 
-export function FieldEditor({ field, onSave }: FieldEditorProps) {
-  const [editing, setEditing] = useState(false);
+export function FieldEditor({ field, isEditing: controlledIsEditing, onEdit, onSave }: FieldEditorProps) {
+  const [localEditing, setLocalEditing] = useState(false);
+  const editing = controlledIsEditing !== undefined ? controlledIsEditing : localEditing;
+  const setEditing = onEdit || setLocalEditing;
   const [draft, setDraft] = useState(
     field.reviewed_value ?? field.canonical_value ?? field.raw_value ?? ""
   );
@@ -57,6 +61,7 @@ export function FieldEditor({ field, onSave }: FieldEditorProps) {
         </div>
 
         {editing ? (
+          <>
           <div className="flex items-center gap-1">
             <input
               ref={inputRef}
@@ -87,8 +92,18 @@ export function FieldEditor({ field, onSave }: FieldEditorProps) {
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
+          {field.raw_value && field.raw_value !== draft && (
+            <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+              <span className="font-medium">OCR:</span>
+              <span className="bg-muted px-1 rounded line-through decoration-red-500/50">{field.raw_value}</span>
+            </div>
+          )}
+          </>
         ) : (
-          <div className="flex items-center gap-1.5">
+          <div 
+            className="flex items-center gap-1.5 cursor-text" 
+            onClick={() => setEditing(true)}
+          >
             <span
               className={cn(
                 "text-sm break-all",
@@ -97,8 +112,24 @@ export function FieldEditor({ field, onSave }: FieldEditorProps) {
             >
               {displayValue ?? "—"}
             </span>
+            {field.page !== null && field.bbox && (
+              <button
+                title={`Found on page ${field.page + 1}`}
+                className="invisible group-hover:visible shrink-0 h-5 w-5 flex items-center justify-center rounded text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                aria-label={`Locate ${field.field_name} in document`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // TODO: trigger locate
+                }}
+              >
+                <Locate className="h-3 w-3" />
+              </button>
+            )}
             <button
-              onClick={() => setEditing(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditing(true);
+              }}
               className="invisible group-hover:visible shrink-0 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted"
               aria-label={`Edit ${field.field_name}`}
             >

@@ -32,6 +32,15 @@ describe("PdfViewer", () => {
     expect(page).toHaveAttribute("data-page", "1");
   });
 
+  it("renders img instead of pdf viewer when isImage", () => {
+    render(<PdfViewer url="http://localhost:8000/documents/abc/file" isImage />);
+    expect(screen.queryByTestId("pdf-document")).not.toBeInTheDocument();
+    expect(screen.getByAltText("Invoice document")).toHaveAttribute(
+      "src",
+      "http://localhost:8000/documents/abc/file"
+    );
+  });
+
   it("applies className", () => {
     const { container } = render(
       <PdfViewer url="http://example.com/test.pdf" className="my-class" />
