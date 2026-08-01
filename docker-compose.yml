@@ -15,14 +15,12 @@ services:
       timeout: 5s
       retries: 10
 
-  chromadb:
-    image: chromadb/chroma:latest
+  qdrant:
+    image: qdrant/qdrant:latest
     ports:
-      - "8001:8000"
+      - "6333:6333"
     volumes:
-      - chroma_data:/chroma/chroma
-    environment:
-      ANONYMIZED_TELEMETRY: "false"
+      - qdrant_data:/qdrant/storage
 
   api:
     build:
@@ -33,8 +31,8 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://invoice:invoice@postgres:5432/invoice_pipeline
       DATABASE_URL_SYNC: postgresql://invoice:invoice@postgres:5432/invoice_pipeline
-      CHROMA_HOST: chromadb
-      CHROMA_PORT: 8000
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       LM_STUDIO_BASE_URL: http://host.docker.internal:1234/v1
       LM_STUDIO_MODEL: ${LM_STUDIO_MODEL:-}
@@ -46,15 +44,23 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
       CORS_ORIGINS: '["http://localhost:3000"]'
       DEBUG: ${DEBUG:-false}
+      CLERK_JWKS_URL: ${CLERK_JWKS_URL:-}
+      CLERK_ISSUER: ${CLERK_ISSUER:-}
+      CLERK_AUDIENCE: ${CLERK_AUDIENCE:-}
     depends_on:
       postgres:
         condition: service_healthy
-      chromadb:
+      qdrant:
         condition: service_started
     volumes:
-      - upload_data:/tmp/uploads
+      - upload_data:/app/data/uploads
+      - hf_cache:/app/.cache/huggingface
+      - runtime_settings:/app/config
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -62,14 +68,20 @@ services:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY must be set in .env}
     ports:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?CLERK_SECRET_KEY must be set in .env}
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   postgres_data:
-  chroma_data:
+  qdrant_data:
   upload_data:
+  hf_cache:
+  runtime_settings:

@@ -1,0 +1,31 @@
+# Production override — apply on top of the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Required env vars (set in a real .env, not committed): POSTGRES_USER,
+# POSTGRES_PASSWORD, POSTGRES_DB, CORS_ORIGINS (JSON array string, e.g.
+# '["https://invoices.example.com"]'). The ${VAR:?message} syntax below makes
+# compose refuse to start if any of these are left unset, instead of silently
+# falling back to the dev defaults baked into docker-compose.yml.
+services:
+  postgres:
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set in production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set in production}
+    ports: []  # do not expose Postgres to the host in production
+    restart: unless-stopped
+
+  qdrant:
+    ports: []  # do not expose Qdrant to the host in production
+    restart: unless-stopped
+
+  api:
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER must be set in production}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB must be set in production}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:?POSTGRES_USER must be set in production}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB must be set in production}
+      DEBUG: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set in production, e.g. '["https://your-domain.com"]'}
+    restart: unless-stopped
+
+  web:
+    restart: unless-stopped
