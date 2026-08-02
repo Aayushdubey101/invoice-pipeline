@@ -52,6 +52,7 @@ def _workspace_row(ws: Workspace) -> dict[str, Any]:
         "status": ws.status,
         "expires_at": ws.expires_at.isoformat() if ws.expires_at else None,
         "created_at": ws.created_at.isoformat(),
+        "trial_uses_remaining": ws.trial_uses_remaining,
     }
 
 

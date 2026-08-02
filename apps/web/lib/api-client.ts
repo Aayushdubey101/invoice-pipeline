@@ -86,6 +86,7 @@ export interface WorkspaceInfo {
   status: string;
   expires_at: string | null;
   created_at: string;
+  trial_uses_remaining: number;
 }
 
 export interface TestConnectionResult {

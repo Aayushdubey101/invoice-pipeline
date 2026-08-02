@@ -82,14 +82,16 @@ async def test_factory_auto_falls_back_to_anthropic() -> None:
         s.ANTHROPIC_MODEL = "claude-sonnet-4-5"
         s.OPENAI_API_KEY = ""
         s.GEMINI_API_KEY = ""
+        s.GROQ_API_KEY = ""
 
         with patch("invoice_pipeline.llm.factory._lm_studio_reachable", return_value=False):
-            with patch("invoice_pipeline.llm.anthropic_client.instructor"):
-                with patch("invoice_pipeline.llm.anthropic_client.anthropic"):
-                    from invoice_pipeline.llm.factory import create_provider
+            with patch("invoice_pipeline.llm.factory.cloud_key_works", return_value=True):
+                with patch("invoice_pipeline.llm.anthropic_client.instructor"):
+                    with patch("invoice_pipeline.llm.anthropic_client.anthropic"):
+                        from invoice_pipeline.llm.factory import create_provider
 
-                    provider = await create_provider()
-                    assert provider.provider_name == "anthropic"
+                        provider = await create_provider()
+                        assert provider.provider_name == "anthropic"
 
 
 @pytest.mark.asyncio

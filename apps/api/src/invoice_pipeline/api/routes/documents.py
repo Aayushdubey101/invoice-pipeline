@@ -18,6 +18,7 @@ from invoice_pipeline.db.models import Workspace
 from invoice_pipeline.db.session import get_session
 from invoice_pipeline.llm.override import parse_provider_override
 from invoice_pipeline.pipeline import run_pipeline
+from invoice_pipeline.services.trial import TRIAL_EXHAUSTED_MESSAGE, consume_trial_use
 from invoice_pipeline.utils.storage import upload_dir
 
 log = structlog.get_logger()
@@ -62,6 +63,10 @@ async def upload_document(
         }
 
     llm_override = parse_provider_override(request, workspace)
+
+    if llm_override is None:
+        if not await consume_trial_use(workspace.id, session):
+            raise HTTPException(status_code=402, detail=TRIAL_EXHAUSTED_MESSAGE)
 
     UPLOADS_TOTAL.inc()
     try:

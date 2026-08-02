@@ -1,13 +1,19 @@
+import time
+
 import structlog
 from httpx import AsyncClient, ConnectError, TimeoutException
 
 from invoice_pipeline.config import LLMProviderName, settings
 from invoice_pipeline.llm.base import LLMProvider, NoLLMProviderConfigured
+from invoice_pipeline.llm.health import cloud_key_works
 from invoice_pipeline.llm.override import ProviderOverride
 
 log = structlog.get_logger()
 
+_PROVIDER_CACHE_TTL_SECONDS = 300.0
+
 _provider_instance: LLMProvider | None = None
+_provider_cached_at: float = 0.0
 
 
 async def _lm_studio_reachable() -> bool:
@@ -116,16 +122,22 @@ async def _auto_detect_provider() -> LLMProvider:
     if await _llamacpp_reachable():
         return _build(LLMProviderName.LLAMACPP)
 
-    if settings.ANTHROPIC_API_KEY:
+    if settings.ANTHROPIC_API_KEY and await cloud_key_works(
+        LLMProviderName.ANTHROPIC, settings.ANTHROPIC_API_KEY
+    ):
         return _build(LLMProviderName.ANTHROPIC)
 
-    if settings.OPENAI_API_KEY:
+    if settings.OPENAI_API_KEY and await cloud_key_works(
+        LLMProviderName.OPENAI, settings.OPENAI_API_KEY
+    ):
         return _build(LLMProviderName.OPENAI)
 
-    if settings.GEMINI_API_KEY:
+    if settings.GEMINI_API_KEY and await cloud_key_works(
+        LLMProviderName.GEMINI, settings.GEMINI_API_KEY
+    ):
         return _build(LLMProviderName.GEMINI)
 
-    if settings.GROQ_API_KEY:
+    if settings.GROQ_API_KEY and await cloud_key_works(LLMProviderName.GROQ, settings.GROQ_API_KEY):
         return _build(LLMProviderName.GROQ)
 
     raise NoLLMProviderConfigured()
@@ -190,8 +202,15 @@ def _build(name: LLMProviderName) -> LLMProvider:
 
 
 async def get_provider() -> LLMProvider:
-    """Return the cached provider, initializing on first call."""
-    global _provider_instance
-    if _provider_instance is None:
+    """Return the cached provider, re-running auto-detect every TTL.
+
+    A key that dies mid-session (expired/quota'd) would otherwise stick
+    forever — this re-evaluates the whole chain periodically so a newly-dead
+    cloud key gets dropped and a working one picked up automatically.
+    """
+    global _provider_instance, _provider_cached_at
+    now = time.monotonic()
+    if _provider_instance is None or (now - _provider_cached_at) > _PROVIDER_CACHE_TTL_SECONDS:
         _provider_instance = await create_provider()
+        _provider_cached_at = now
     return _provider_instance

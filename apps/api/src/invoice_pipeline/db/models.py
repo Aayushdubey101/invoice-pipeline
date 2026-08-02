@@ -43,6 +43,7 @@ class Workspace(Base):
     status: Mapped[str] = mapped_column(String(16), default="active")  # active | finished
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     provider_preference: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    trial_uses_remaining: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

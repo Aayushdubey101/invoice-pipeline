@@ -31,6 +31,7 @@ from invoice_pipeline.db.models import LEGACY_WORKSPACE_ID, Workspace
 from invoice_pipeline.db.session import async_session_factory, get_session
 from invoice_pipeline.llm.override import ProviderOverride, parse_provider_override
 from invoice_pipeline.pipeline import run_pipeline
+from invoice_pipeline.services.trial import TRIAL_EXHAUSTED_MESSAGE, consume_trial_use
 from invoice_pipeline.stages.ingest import ALLOWED_MIME_TYPES
 from invoice_pipeline.utils.storage import upload_dir
 
@@ -160,6 +161,34 @@ async def _process_batch_files(
             # MIME type guard
             if mime_type not in ALLOWED_MIME_TYPES:
                 skipped += 1
+                await _sync_batch_counts()
+                continue
+
+            # Trial guard: only meters calls falling back to the platform's
+            # own .env key — a request carrying its own BYOK override skips this.
+            if override is None and not await consume_trial_use(workspace_id, session):
+                doc_id = hashlib.sha256(file_bytes + workspace_id.encode()).hexdigest()
+                (batch_upload_dir / doc_id).write_bytes(file_bytes)
+                existing = await session.get(models.Document, doc_id)
+                trial_error = [{"stage": "trial_limit", "message": TRIAL_EXHAUSTED_MESSAGE, "fatal": True}]
+                if existing is None:
+                    session.add(
+                        models.Document(
+                            id=doc_id,
+                            workspace_id=workspace_id,
+                            filename=filename,
+                            mime_type=mime_type,
+                            file_size_bytes=len(file_bytes),
+                            status="failed",
+                            errors=trial_error,
+                            batch_id=batch_id,
+                        )
+                    )
+                else:
+                    existing.status = "failed"
+                    existing.errors = trial_error
+                    existing.batch_id = batch_id
+                failed += 1
                 await _sync_batch_counts()
                 continue
 
