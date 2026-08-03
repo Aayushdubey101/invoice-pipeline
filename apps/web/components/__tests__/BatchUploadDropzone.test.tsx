@@ -16,10 +16,10 @@ function makeFile(name: string, relativePath?: string): File {
   return file;
 }
 
-function renderDropzone() {
+function renderDropzone(canUpload?: boolean) {
   return render(
     <ProviderSessionProvider>
-      <BatchUploadDropzone />
+      <BatchUploadDropzone canUpload={canUpload} />
     </ProviderSessionProvider>
   );
 }
@@ -63,5 +63,19 @@ describe("BatchUploadDropzone", () => {
     fireEvent.change(input);
 
     expect(screen.getByText("1 unsupported file skipped")).toBeInTheDocument();
+  });
+
+  it("lets files be queued but disables Process when canUpload is false", async () => {
+    const user = userEvent.setup();
+    renderDropzone(false);
+
+    const input = document.getElementById("file-input-single") as HTMLInputElement;
+    await user.upload(input, [makeFile("invoice.pdf")]);
+
+    expect(screen.getByText("1 file queued")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Process 1 file/ })).toBeDisabled();
+    expect(
+      screen.getByText("Continue as guest or sign in to process these files.")
+    ).toBeInTheDocument();
   });
 });

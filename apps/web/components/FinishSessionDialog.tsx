@@ -20,7 +20,7 @@ interface FinishSessionDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type Status = "idle" | "downloading" | "ready" | "error";
+type Status = "confirm" | "downloading" | "ready" | "error";
 
 function triggerDownload(blob: Blob): void {
   const url = URL.createObjectURL(blob);
@@ -37,13 +37,15 @@ export function FinishSessionDialog({ open, onOpenChange }: FinishSessionDialogP
   const router = useRouter();
   const { clearWorkspace } = useWorkspaceSession();
   const { resetSession } = useProviderSession();
-  const [status, setStatus] = useState<Status>("idle");
+  const [status, setStatus] = useState<Status>("confirm");
 
   useEffect(() => {
-    if (!open) {
-      setStatus("idle");
-      return;
-    }
+    if (!open) setStatus("confirm");
+  }, [open]);
+
+  const handleCancel = () => onOpenChange(false);
+
+  const handleFinish = () => {
     setStatus("downloading");
     apiClient.session
       .finish()
@@ -52,7 +54,7 @@ export function FinishSessionDialog({ open, onOpenChange }: FinishSessionDialogP
         setStatus("ready");
       })
       .catch(() => setStatus("error"));
-  }, [open]);
+  };
 
   const handleDone = () => {
     resetSession();
@@ -61,12 +63,16 @@ export function FinishSessionDialog({ open, onOpenChange }: FinishSessionDialogP
     router.push("/");
   };
 
+  const isConfirmStep = status === "confirm";
+
   return (
-    <Dialog open={open}>
-      <DialogContent showCloseButton={false}>
+    <Dialog open={open} onOpenChange={isConfirmStep ? (next) => { if (!next) handleCancel(); } : undefined}>
+      <DialogContent showCloseButton={isConfirmStep}>
         <DialogHeader>
-          <DialogTitle>Your Session Is Complete</DialogTitle>
+          <DialogTitle>{isConfirmStep ? "End Guest Session?" : "Your Session Is Complete"}</DialogTitle>
           <DialogDescription>
+            {isConfirmStep &&
+              "This downloads an export of your documents, then permanently deletes everything from this session. Close this to keep working instead."}
             {status === "downloading" && "Preparing your export…"}
             {status === "ready" &&
               "Your download has started. Once it's saved, everything from this session — documents, data, and files — will be permanently deleted."}
@@ -75,13 +81,24 @@ export function FinishSessionDialog({ open, onOpenChange }: FinishSessionDialogP
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button onClick={handleDone} disabled={status === "downloading"}>
-            {status === "downloading"
-              ? "Preparing..."
-              : status === "error"
-                ? "Leave Anyway"
-                : "Download & Finish"}
-          </Button>
+          {isConfirmStep ? (
+            <>
+              <Button variant="outline" onClick={handleCancel} className="w-full sm:w-auto">
+                Cancel
+              </Button>
+              <Button onClick={handleFinish} className="w-full sm:w-auto">
+                Download & Finish
+              </Button>
+            </>
+          ) : (
+            <Button onClick={handleDone} disabled={status === "downloading"}>
+              {status === "downloading"
+                ? "Preparing..."
+                : status === "error"
+                  ? "Leave Anyway"
+                  : "Done"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

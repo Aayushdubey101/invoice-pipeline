@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ProviderGuardDialog } from "../ProviderGuardDialog";
 
 describe("ProviderGuardDialog", () => {
@@ -20,6 +21,21 @@ describe("ProviderGuardDialog", () => {
 
   it("renders nothing visible when closed", () => {
     render(<ProviderGuardDialog open={false} />);
+
+    expect(screen.queryByText("No AI Provider Configured")).not.toBeInTheDocument();
+  });
+
+  it("has no close button when not dismissible", () => {
+    render(<ProviderGuardDialog open />);
+
+    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
+  });
+
+  it("closes via the X button when dismissible", async () => {
+    const user = userEvent.setup();
+    render(<ProviderGuardDialog open dismissible />);
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
 
     expect(screen.queryByText("No AI Provider Configured")).not.toBeInTheDocument();
   });

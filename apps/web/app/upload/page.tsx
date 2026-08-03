@@ -31,13 +31,9 @@ export default function UploadPage() {
           Each file enters the AI pipeline independently — failures don&apos;t stop others.
         </p>
       </div>
-      {isLoading ? null : !hasWorkspace ? (
-        <WorkspaceGuardDialog open />
-      ) : canUpload ? (
-        <BatchUploadDropzone />
-      ) : (
-        <ProviderGuardDialog open />
-      )}
+      {!hasWorkspace && <WorkspaceGuardDialog open dismissible />}
+      {hasWorkspace && !isLoading && !canUpload && <ProviderGuardDialog open dismissible />}
+      <BatchUploadDropzone canUpload={canUpload} />
     </div>
   );
 }

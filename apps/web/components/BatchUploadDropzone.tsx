@@ -92,7 +92,12 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function BatchUploadDropzone() {
+interface BatchUploadDropzoneProps {
+  /** False while signed-out and no guest workspace, or no AI provider configured — queueing files is fine, sending them is not. */
+  canUpload?: boolean;
+}
+
+export function BatchUploadDropzone({ canUpload = true }: BatchUploadDropzoneProps) {
   const router = useRouter();
   const { activeProvider, providers, hasSessionProvider } = useProviderSession();
   const [dragOver, setDragOver] = useState(false);
@@ -152,7 +157,7 @@ export function BatchUploadDropzone() {
     setFiles((prev) => prev.filter((_, i) => i !== idx));
 
   const uploadAll = useCallback(async () => {
-    if (!files.length) return;
+    if (!files.length || !canUpload) return;
     setState("uploading");
     setErrorMsg(null);
     setUploadProgress(0);
@@ -185,7 +190,7 @@ export function BatchUploadDropzone() {
     } finally {
       abortRef.current = null;
     }
-  }, [files, activeProvider, providers, hasSessionProvider]);
+  }, [files, activeProvider, providers, hasSessionProvider, canUpload]);
 
   const cancelUpload = () => abortRef.current?.abort();
 
@@ -365,10 +370,17 @@ export function BatchUploadDropzone() {
         </div>
       ) : (
         files.length > 0 && (
-          <Button onClick={uploadAll} className="gap-2">
-            <Upload className="h-4 w-4" />
-            Process {files.length} file{files.length !== 1 ? "s" : ""}
-          </Button>
+          <div className="space-y-1">
+            <Button onClick={uploadAll} disabled={!canUpload} className="gap-2">
+              <Upload className="h-4 w-4" />
+              Process {files.length} file{files.length !== 1 ? "s" : ""}
+            </Button>
+            {!canUpload && (
+              <p className="text-xs text-muted-foreground">
+                Continue as guest or sign in to process these files.
+              </p>
+            )}
+          </div>
         )
       )}
 

@@ -34,7 +34,11 @@ vi.mock("@/lib/api-client", () => ({
 
 // Mock components
 vi.mock("@/components/BatchUploadDropzone", () => ({
-  BatchUploadDropzone: () => <div data-testid="dropzone">Dropzone</div>,
+  BatchUploadDropzone: ({ canUpload }: { canUpload: boolean }) => (
+    <div data-testid="dropzone" data-can-upload={canUpload}>
+      Dropzone
+    </div>
+  ),
 }));
 
 vi.mock("@/components/ProviderGuardDialog", () => ({
@@ -72,22 +76,24 @@ describe("UploadPage", () => {
     );
   };
 
-  it("shows workspace guard when signed out and no active workspace", async () => {
+  it("shows a dismissible workspace guard alongside the dropzone when signed out with no active workspace", async () => {
     vi.mocked(clerkNextjs.useAuth).mockReturnValue({ isSignedIn: false } as any);
-    
+
     renderPage();
-    
+
     expect(await screen.findByTestId("workspace-guard")).toBeInTheDocument();
-    expect(screen.queryByTestId("dropzone")).not.toBeInTheDocument();
+    // Dropzone stays mounted underneath so the page can still be browsed / navigated away from.
+    expect(screen.getByTestId("dropzone")).toBeInTheDocument();
+    expect(screen.getByTestId("dropzone")).toHaveAttribute("data-can-upload", "false");
   });
 
-  it("shows dropzone when signed in, even if no active guest workspace", async () => {
+  it("shows dropzone with upload enabled when signed in, even if no active guest workspace", async () => {
     vi.mocked(clerkNextjs.useAuth).mockReturnValue({ isSignedIn: true } as any);
-    
+
     renderPage();
-    
+
     expect(screen.queryByTestId("workspace-guard")).not.toBeInTheDocument();
-    // It should render dropzone instead
     expect(await screen.findByTestId("dropzone")).toBeInTheDocument();
+    expect(screen.getByTestId("dropzone")).toHaveAttribute("data-can-upload", "true");
   });
 });
