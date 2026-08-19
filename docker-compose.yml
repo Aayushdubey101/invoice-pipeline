@@ -3,15 +3,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: invoice
-      POSTGRES_PASSWORD: invoice
-      POSTGRES_DB: invoice_pipeline
+      POSTGRES_USER: ${POSTGRES_USER:-invoice}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-invoice}
+      POSTGRES_DB: ${POSTGRES_DB:-invoice_pipeline}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U invoice -d invoice_pipeline"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-invoice} -d ${POSTGRES_DB:-invoice_pipeline}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -30,8 +30,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://invoice:invoice@postgres:5432/invoice_pipeline}
-      DATABASE_URL_SYNC: ${DATABASE_URL_SYNC:-postgresql://invoice:invoice@postgres:5432/invoice_pipeline}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-invoice}:${POSTGRES_PASSWORD:-invoice}@postgres:5432/${POSTGRES_DB:-invoice_pipeline}}
+      DATABASE_URL_SYNC: ${DATABASE_URL_SYNC:-postgresql://${POSTGRES_USER:-invoice}:${POSTGRES_PASSWORD:-invoice}@postgres:5432/${POSTGRES_DB:-invoice_pipeline}}
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}
