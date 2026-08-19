@@ -38,9 +38,7 @@ RUN groupadd --system appuser && useradd --system --gid appuser --home-dir /app 
     && chown -R appuser:appuser /app/data/uploads /app/.cache /app/config \
     && chmod -R a+rX /app
 
-# appuser has no home dir — point HOME at /app (already owned by appuser) so
-# uv/other tools can create their runtime cache dirs instead of failing on
-# a missing/unwritable /home/appuser.
+ENV PATH="/app/.venv/bin:$PATH"
 ENV HOME=/app
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
@@ -49,4 +47,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 # Stay root until entrypoint chowns the (possibly stale-permissioned) mounted
 # upload volume, then gosu drops to appuser before exec'ing the real command.
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn invoice_pipeline.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn invoice_pipeline.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
