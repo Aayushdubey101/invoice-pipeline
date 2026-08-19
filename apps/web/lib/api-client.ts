@@ -6,7 +6,7 @@ import type {
   VendorList,
 } from "@/lib/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/py";
 
 // ── Phase 14 — active workspace id, kept in sync by WorkspaceSessionContext ──
 // A plain module-level value (not React state) since `request()` and the raw
