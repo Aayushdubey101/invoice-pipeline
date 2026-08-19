@@ -57,6 +57,7 @@ def _workspace_row(ws: Workspace) -> dict[str, Any]:
 
 
 @router.post("", status_code=201)
+@router.post("/", status_code=201, include_in_schema=False)
 @limiter.limit("30/minute")
 async def create_guest_workspace(
     request: Request,
