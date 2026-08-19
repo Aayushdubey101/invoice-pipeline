@@ -34,8 +34,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra docs --extra ocr --extra ml
 
 RUN groupadd --system appuser && useradd --system --gid appuser --home-dir /app --no-create-home appuser \
-    && mkdir -p /app/data/uploads \
-    && chown -R appuser:appuser /app
+    && mkdir -p /app/data/uploads /app/.cache /app/config \
+    && chown -R appuser:appuser /app/data/uploads /app/.cache /app/config \
+    && chmod -R a+rX /app
 
 # appuser has no home dir — point HOME at /app (already owned by appuser) so
 # uv/other tools can create their runtime cache dirs instead of failing on
