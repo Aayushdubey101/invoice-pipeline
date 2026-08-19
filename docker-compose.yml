@@ -46,7 +46,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.1-8b-instant}
       GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
       CORS_ORIGINS: ${CORS_ORIGINS:-'["http://localhost:3000","https://invoice-intelligence.duckdns.org"]'}
       DEBUG: ${DEBUG:-false}
