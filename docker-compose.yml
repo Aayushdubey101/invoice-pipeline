@@ -1,3 +1,4 @@
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -29,8 +30,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://invoice:invoice@postgres:5432/invoice_pipeline
-      DATABASE_URL_SYNC: postgresql://invoice:invoice@postgres:5432/invoice_pipeline
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://invoice:invoice@postgres:5432/invoice_pipeline}
+      DATABASE_URL_SYNC: ${DATABASE_URL_SYNC:-postgresql://invoice:invoice@postgres:5432/invoice_pipeline}
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}

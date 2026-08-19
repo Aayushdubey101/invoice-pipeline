@@ -2,6 +2,9 @@ import json
 from enum import Enum
 from pathlib import Path
 
+from typing import Any
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +32,25 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEBUG: bool = False
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            if (v.startswith("'") and v.endswith("'")) or (v.startswith('"') and v.endswith('"')):
+                v = v[1:-1].strip()
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    parsed = json.loads(v)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if item]
+                except Exception:
+                    pass
+            return [i.strip() for i in v.split(",") if i.strip()]
+        elif isinstance(v, (list, tuple)):
+            return [str(item).strip() for item in v if item]
+        return ["http://localhost:3000"]
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://invoice:invoice@localhost:5432/invoice_pipeline"
