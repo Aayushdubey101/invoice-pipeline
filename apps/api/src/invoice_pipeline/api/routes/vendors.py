@@ -41,6 +41,7 @@ def _vendor_row(v: models.Vendor) -> dict[str, Any]:
 
 
 @router.get("/")
+@router.get("", include_in_schema=False)
 async def list_vendors(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=500, ge=1, le=1000),

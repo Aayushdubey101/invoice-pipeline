@@ -273,6 +273,7 @@ async def _process_batch_files(
 
 
 @router.get("/")
+@router.get("", include_in_schema=False)
 async def list_batches(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),

@@ -3,6 +3,7 @@ import time
 import instructor
 import structlog
 from google import genai
+from google.genai import types
 from pydantic import BaseModel
 
 from invoice_pipeline.config import settings
@@ -45,9 +46,13 @@ class GeminiProvider:
     ) -> tuple[BaseModel, ExtractionMeta]:
         start = time.monotonic()
 
-        extra_kwargs: dict = {}
-        if self._config.get("max_tokens") is not None:
-            extra_kwargs["max_tokens"] = self._config["max_tokens"]
+        effective_temp = self._config.get("temperature", temperature if temperature is not None else 0.0)
+        max_tokens = self._config.get("max_tokens")
+
+        gen_config = types.GenerateContentConfig(
+            temperature=effective_temp,
+            max_output_tokens=max_tokens,
+        )
 
         response, raw = await self._client.chat.completions.create_with_completion(
             model=self._model,
@@ -56,9 +61,8 @@ class GeminiProvider:
                 {"role": "user", "content": text},
             ],
             response_model=schema,
-            temperature=self._config.get("temperature", temperature),
+            config=gen_config,
             max_retries=settings.LLM_MAX_RETRIES,
-            **extra_kwargs,
         )
 
         latency_ms = (time.monotonic() - start) * 1000

@@ -104,6 +104,7 @@ async def test_connection(
 
 
 @router.get("/")
+@router.get("", include_in_schema=False)
 async def get_settings() -> dict[str, Any]:
     return {
         "llm_provider": settings.LLM_PROVIDER.value,
@@ -123,6 +124,7 @@ async def get_settings() -> dict[str, Any]:
 
 
 @router.patch("/")
+@router.patch("", include_in_schema=False)
 @limiter.limit("10/minute")
 async def update_settings(request: Request, body: SettingsUpdate) -> dict[str, Any]:
     if body.llm_provider is not None:

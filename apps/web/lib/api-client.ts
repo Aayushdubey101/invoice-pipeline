@@ -227,7 +227,7 @@ export const apiClient = {
   },
 
   vendors: {
-    list: () => request<VendorList>("/vendors/"),
+    list: () => request<VendorList>("/vendors"),
     update: (vendorId: string, data: Partial<Pick<Vendor, "canonical_name" | "aliases" | "status">>) =>
       request<Vendor>(`/vendors/${vendorId}`, {
         method: "PATCH",
@@ -236,9 +236,9 @@ export const apiClient = {
   },
 
   settings: {
-    get: () => request<AppSettings>("/settings/"),
+    get: () => request<AppSettings>("/settings"),
     update: (data: Partial<SettingsUpdatePayload>) =>
-      request<AppSettings>("/settings/", {
+      request<AppSettings>("/settings", {
         method: "PATCH",
         body: JSON.stringify(data),
       }),
@@ -371,7 +371,7 @@ export const apiClient = {
     },
     list: (skip = 0, limit = 50) =>
       request<{ batches: BatchSummary[]; total: number }>(
-        `/batch/?skip=${skip}&limit=${limit}`
+        `/batch?skip=${skip}&limit=${limit}`
       ),
     get: (batchId: string) => request<BatchDetail>(`/batch/${batchId}`),
     retryFailed: (batchId: string) =>
