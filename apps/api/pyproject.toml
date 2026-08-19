@@ -50,6 +50,7 @@ dependencies = [
     # Phase 14.8: Clerk bearer-token verification
     "pyjwt[crypto]>=2.9.0",
     "cryptography>=48.0.0",
+    "jsonref>=1.1.0",
 ]
 
 [project.optional-dependencies]
