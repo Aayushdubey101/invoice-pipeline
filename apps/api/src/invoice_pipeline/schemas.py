@@ -56,7 +56,7 @@ class FieldValue(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     evidence: str | None = None  # verbatim source snippet
     page: int | None = None
-    bbox: tuple[float, float, float, float] | None = None  # (x0, y0, x1, y1)
+    bbox: list[float] | None = None  # [x0, y0, x1, y1]
 
 
 class CellValue(BaseModel):
@@ -66,7 +66,7 @@ class CellValue(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     evidence: str | None = None     # verbatim source snippet
     page: int | None = None          # 0-indexed page number
-    bbox: tuple[float, float, float, float] | None = None  # (x0, y0, x1, y1)
+    bbox: list[float] | None = None  # [x0, y0, x1, y1]
     source_evidence: str | None = None  # broader context block from OCR/text
 
 
