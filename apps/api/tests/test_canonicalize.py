@@ -291,7 +291,7 @@ async def test_ground_fields_populates_bbox_for_grounded_value():
     # The sliding-window matcher unions bboxes of every word in the smallest
     # matching chunk starting at word 0 — here that's ["Invoice", "INV-2024-001"]
     # since the whitespace-stripped concatenation already contains the needle.
-    assert result.extracted.invoice_number.bbox == (0.0, 0.0, 150.0, 10.0)
+    assert result.extracted.invoice_number.bbox == [0.0, 0.0, 150.0, 10.0]
     assert result.extracted.invoice_number.page == 0
     # confidence untouched — value is grounded in the OCR text
     assert result.extracted.invoice_number.confidence == invoice.invoice_number.confidence

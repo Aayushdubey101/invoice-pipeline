@@ -5,7 +5,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from invoice_pipeline.db.models import LEGACY_WORKSPACE_ID
 
@@ -90,6 +90,19 @@ class RichLineItem(BaseModel):
     math_valid: bool | None = None   # qty * unit_price ≈ total?
     page: int | None = None          # primary page this row appears on
     table_index: int = 0             # which table on the page (0-indexed)
+
+    @field_validator("row_type", mode="before")
+    @classmethod
+    def _coerce_row_type(cls, v: Any) -> Any:
+        # Gemini/instructor structured-output round-trip sometimes hands back
+        # a plain str instead of a RowType instance, which fails pydantic's
+        # isinstance-based enum check. Coerce explicitly before validation.
+        if isinstance(v, str) and not isinstance(v, RowType):
+            try:
+                return RowType(v)
+            except ValueError:
+                return RowType.UNKNOWN
+        return v
 
 
 class Invoice(BaseModel):

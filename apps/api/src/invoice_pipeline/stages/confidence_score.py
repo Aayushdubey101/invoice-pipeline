@@ -191,7 +191,7 @@ def apply_grounding(invoice: Invoice, pages: list[Page], raw_text: str) -> Invoi
                                 x1 = max(b[2] for b in bboxes)
                                 y1 = max(b[3] for b in bboxes)
                                 update_dict["page"] = page.page_num
-                                update_dict["bbox"] = (x0, y0, x1, y1)
+                                update_dict["bbox"] = [x0, y0, x1, y1]
                                 found = True
                             break
                             
