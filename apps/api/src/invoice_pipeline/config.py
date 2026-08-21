@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-flash-latest"
 
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama-3.1-8b-instant"
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
     GROQ_TEMPERATURE: float = 0.0
     GROQ_MAX_TOKENS: int = 4096
