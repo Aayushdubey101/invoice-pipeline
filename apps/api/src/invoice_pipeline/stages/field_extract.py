@@ -47,6 +47,29 @@ async def field_extract(doc: Document, override: ProviderOverride | None = None)
                 )
             except Exception as fallback_exc:
                 return _extraction_failed(doc, fallback_exc)
+        elif override is None and provider.provider_name == "gemini":
+            # Gemini backend can 503 under demand spikes even with a valid
+            # key/model. Fall back once to Groq (fast/cheap) rather than
+            # failing the document outright.
+            log.warning(
+                "provider_fallback",
+                stage="field_extract",
+                document_id=doc.document_id,
+                from_provider="gemini",
+                to_provider="groq",
+                error=str(exc),
+            )
+            try:
+                from invoice_pipeline.llm.groq_client import GroqProvider
+
+                result, meta = await GroqProvider().extract(
+                    text=doc.raw_text,
+                    schema=Invoice,
+                    system_prompt=EXTRACTION_SYSTEM_PROMPT,
+                    temperature=0.0,
+                )
+            except Exception as fallback_exc:
+                return _extraction_failed(doc, fallback_exc)
         else:
             return _extraction_failed(doc, exc)
 

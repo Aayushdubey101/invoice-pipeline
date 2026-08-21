@@ -4,13 +4,26 @@ import time
 
 import instructor
 import structlog
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, NotFoundError
 from pydantic import BaseModel
 
 from invoice_pipeline.config import settings
 from invoice_pipeline.llm.base import ExtractionMeta, NoLLMProviderConfigured
 
 log = structlog.get_logger()
+
+# Groq periodically retires models outright (not just deprecates) - the
+# configured GROQ_MODEL 404s with model_not_found/model_decommissioned and
+# stays broken until someone edits config by hand (happened today: llama-3.x
+# -> openai/gpt-oss-120b, see commit 6eb60aa). Try these, in order, as a
+# same-provider fallback before giving up. Keep in sync with active chat
+# models at https://console.groq.com/dashboard/limits - skip guard/safety
+# and non-English-only models, they don't support this pipeline's JSON mode.
+_GROQ_MODEL_CANDIDATES: tuple[str, ...] = (
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.6-27b",
+)
 
 
 class GroqProvider:
@@ -53,17 +66,25 @@ class GroqProvider:
             "temperature", temperature if temperature is not None else settings.GROQ_TEMPERATURE
         )
 
-        response, raw = await self._client.chat.completions.create_with_completion(
-            model=self._model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text},
-            ],
-            response_model=schema,
-            temperature=effective_temp,
-            max_tokens=self._config.get("max_tokens", settings.GROQ_MAX_TOKENS),
-            max_retries=settings.LLM_MAX_RETRIES,
-        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": text},
+        ]
+        max_tokens = self._config.get("max_tokens", settings.GROQ_MAX_TOKENS)
+
+        try:
+            response, raw = await self._client.chat.completions.create_with_completion(
+                model=self._model,
+                messages=messages,
+                response_model=schema,
+                temperature=effective_temp,
+                max_tokens=max_tokens,
+                max_retries=settings.LLM_MAX_RETRIES,
+            )
+        except NotFoundError as exc:
+            response, raw = await self._retry_with_fallback_model(
+                exc, messages, schema, effective_temp, max_tokens
+            )
 
         latency_ms = (time.monotonic() - start) * 1000
         usage = raw.usage
@@ -89,3 +110,36 @@ class GroqProvider:
         )
 
         return response, meta
+
+    async def _retry_with_fallback_model(
+        self,
+        original_exc: NotFoundError,
+        messages: list[dict],
+        schema: type[BaseModel],
+        temperature: float,
+        max_tokens: int | None,
+    ) -> tuple[BaseModel, object]:
+        """self._model was retired by Groq (404) — try candidates, adopt first that works."""
+        for candidate in _GROQ_MODEL_CANDIDATES:
+            if candidate == self._model:
+                continue
+            log.warning(
+                "groq_model_retired",
+                old_model=self._model,
+                new_model=candidate,
+                error=str(original_exc),
+            )
+            try:
+                response, raw = await self._client.chat.completions.create_with_completion(
+                    model=candidate,
+                    messages=messages,
+                    response_model=schema,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    max_retries=settings.LLM_MAX_RETRIES,
+                )
+            except NotFoundError:
+                continue
+            self._model = candidate
+            return response, raw
+        raise original_exc

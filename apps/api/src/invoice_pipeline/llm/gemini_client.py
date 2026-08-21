@@ -5,6 +5,7 @@ import structlog
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
+from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential_jitter
 
 from invoice_pipeline.config import settings
 from invoice_pipeline.llm.base import ExtractionMeta, NoLLMProviderConfigured
@@ -62,7 +63,10 @@ class GeminiProvider:
             ],
             response_model=schema,
             config=gen_config,
-            max_retries=settings.LLM_MAX_RETRIES,
+            max_retries=AsyncRetrying(
+                stop=stop_after_attempt(settings.LLM_MAX_RETRIES),
+                wait=wait_exponential_jitter(initial=1, max=10),
+            ),
         )
 
         latency_ms = (time.monotonic() - start) * 1000
