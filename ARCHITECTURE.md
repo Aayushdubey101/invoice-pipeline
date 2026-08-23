@@ -29,8 +29,8 @@
         ┌──────────┴──────────┐
         │                     │
 ┌───────▼──────┐   ┌──────────▼────────────┐
-│  PostgreSQL  │   │  ChromaDB             │
-│  (port 5432) │   │  (port 8001)          │
+│  PostgreSQL  │   │  Qdrant               │
+│  (port 5432) │   │  (port 6333)          │
 │              │   │                       │
 │  documents   │   │  vendor embeddings    │
 │  invoices    │   │  (all-MiniLM-L6-v2)  │
@@ -88,7 +88,7 @@ confidence_score
 canonicalize
     │          dates: dateparser → YYYY-MM-DD
     │          currency: babel.numbers → ISO 4217 + Decimal
-    │          vendor: rapidfuzz ≥90 → Chroma cosine ≥0.85 → new vendor
+    │          vendor: rapidfuzz ≥90 → Qdrant cosine ≥0.85 → new vendor
     │          tax IDs: python-stdnum validation
     │
     ▼
@@ -135,18 +135,24 @@ audit_log     id(uuid), document_id→documents, actor, stage, action,
 LLMProvider (Protocol)
 │   async def extract(text, schema, system_prompt, temperature) → (BaseModel, ExtractionMeta)
 │
-├── LMStudioProvider    instructor + AsyncOpenAI → LM Studio endpoint
+├── LMStudioProvider    instructor + AsyncOpenAI → LM Studio endpoint (local)
+├── OllamaProvider      instructor + AsyncOpenAI → Ollama endpoint (local)
+├── LlamaCppProvider    instructor + AsyncOpenAI → llama.cpp endpoint (local)
 ├── OpenAIProvider      instructor + AsyncOpenAI → api.openai.com
 ├── AnthropicProvider   instructor + AsyncAnthropic
-└── GeminiProvider      instructor + google-genai
+├── GeminiProvider      instructor + google-genai
+└── GroqProvider        instructor + AsyncOpenAI → api.groq.com
 
 Factory auto-detect order:
   1. LLM_PROVIDER env var explicit
-  2. LM Studio: GET {LM_STUDIO_BASE_URL}/models, 2s timeout
-  3. ANTHROPIC_API_KEY set?
-  4. OPENAI_API_KEY set?
-  5. GEMINI_API_KEY set?
-  6. raise NoLLMProviderConfigured
+  2. LM Studio reachable? GET {LM_STUDIO_BASE_URL}/models, 2s timeout
+  3. Ollama reachable? GET {OLLAMA_BASE_URL}/models, 2s timeout
+  4. llama.cpp reachable? GET {LLAMACPP_BASE_URL}/models, 2s timeout
+  5. ANTHROPIC_API_KEY set and working?
+  6. OPENAI_API_KEY set and working?
+  7. GEMINI_API_KEY set and working?
+  8. GROQ_API_KEY set and working?
+  9. raise NoLLMProviderConfigured
 ```
 
 ## Frontend Data Flow
@@ -193,7 +199,7 @@ The `audit_log` table has no UPDATE or DELETE paths in the codebase. This is enf
 
 ### Vendor Canonicalization: Two-Stage
 
-rapidfuzz (CPU, microseconds) runs first. Only on a miss does the pipeline invoke sentence-transformers + ChromaDB (milliseconds but heavier). This keeps the common case fast for known vendors.
+rapidfuzz (CPU, microseconds) runs first. Only on a miss does the pipeline invoke sentence-transformers + Qdrant (milliseconds but heavier). This keeps the common case fast for known vendors.
 
 ### Frontend: TanStack Query + Cache Invalidation
 
